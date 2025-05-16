@@ -1,0 +1,17 @@
+Flask
+Flask-SocketIO
+Flask-SQLAlchemy
+SQLAlchemy
+opencv-python
+numpy
+dlib
+torch
+torchvision
+torchaudio
+mediapipe
+telepot
+ultralytics
+tensorflow
+Pillow
+python-dotenv
+werkzeug 
