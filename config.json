@@ -1,0 +1,54 @@
+{
+    "fall_detection": {
+        "enabled": true,
+        "sensitivity": "Medium (Balanced)",
+        "play_sound": true,
+        "min_kpt_confidence": 0.3,
+        "velocity_threshold": 0.4,
+        "confidence_threshold": 0.7,
+        "confirm_frames": 3,
+        "clear_frames": 5
+    },
+    "motion_detection": {
+        "enabled": true
+    },
+    "inactivity_detection": {
+        "enabled": true,
+        "threshold": "30 minutes",
+        "play_sound": true
+    },
+    "notifications": {
+        "in_app": true,
+        "email": true,
+        "sms": false,
+        "phone_call": false
+    },
+    "emergency_contacts": {
+        "primary": {
+            "name": "Enson",
+            "relationship": "Family Member",
+            "phone": "85855011",
+            "email": "enson.eik@gmail.com"
+        },
+        "secondary": {
+            "name": "Jane Smith",
+            "relationship": "Caretaker",
+            "phone": "(987) 654-3210",
+            "email": "ensoneik90@gmail.com"
+        }
+    },
+    "alert_schedule": {
+        "mode": "247"
+    },
+    "email_alerting": {
+        "enabled": true,
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "enson9646@gmail.com",
+        "smtp_password": "zwpklaasbdzejflt",
+        "sender_email": "enson9646@gmail.com",
+        "recipient_emails": [
+            "enson.eik@gmail.com"
+        ]
+    }
+}
