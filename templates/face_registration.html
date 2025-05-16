@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Registration - Auto Capture</title>
+    <style>
+        /* (Keep existing styles, or refine as needed) */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; background-color: #f8f9fa; padding: 20px; font-size: 17px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { max-width: 700px; width: 100%; margin: 20px auto; padding: 25px; background: white; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 25px; }
+        .header h1 { color: #333; }
+        .header p { color: #666; font-size: 0.95em; }
+
+        .video-container { width: 100%; max-width: 560px; margin: 15px auto; position: relative; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); background-color: #000;}
+        #videoElement { width: 100%; height: auto; display: block; transform: scaleX(-1); /* Mirror display */}
+
+        .instructions-container { text-align: center; margin: 20px 0; padding: 15px; background-color: #e9ecef; border-radius: 8px; min-height: 80px;}
+        #instructionText { font-size: 1.2em; color: #2c3e50; font-weight: bold; min-height: 1.5em; }
+        #countdownText { font-size: 1.1em; color: #27ae60; margin-top: 5px; font-weight: bold;}
+        #errorMessage { font-size: 0.9em; color: #e74c3c; margin-top: 5px; min-height: 1.2em;}
+
+
+        .progress-container { width: 100%; max-width: 560px; margin: 15px auto; text-align: center; }
+        #overallProgressText { font-size: 0.9em; color: #555; margin-bottom: 5px; }
+        .progress-bar { width: 100%; height: 22px; background-color: #e0e0e0; border-radius: 10px; overflow: hidden; }
+        .progress { width: 0%; height: 100%; background-color: #3498db; transition: width 0.4s ease-in-out; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.8em;}
+
+        .status { text-align: center; margin: 15px 0; padding: 10px; border-radius: 5px; display: none; font-weight: 500; }
+        .status.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block; }
+        .status.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; display: block; }
+        .status.info { background-color: #cce5ff; color: #004085; border: 1px solid #b8daff; display: block; }
+
+        .controls { display: flex; justify-content: center; gap: 15px; margin-top: 25px; flex-wrap: wrap; }
+        .button { padding: 12px 25px; font-size: 1.05em; border: none; border-radius: 6px; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease; font-weight: 500; }
+        .button:disabled { background-color: #ccc !important; cursor: not-allowed; color: #666 !important;}
+        .button:hover:not(:disabled) { transform: translateY(-1px); }
+        #startButton { background-color: #3498db; color: white; }
+        #startButton:hover:not(:disabled) { background-color: #2980b9; }
+        /* Capture button might be removed or repurposed if auto-capture is primary */
+        #captureButton { background-color: #e67e22; color: white; display: none; /* Hidden for auto-capture focus */}
+        #submitButton { background-color: #5cb85c; color: white; }
+        #submitButton:hover:not(:disabled) { background-color: #4cae4c; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Multi-Pose Face Registration</h1>
+            <p>The system will attempt to automatically capture your face for each pose.</p>
+        </div>
+
+        <div class="video-container">
+            <video id="videoElement" autoplay playsinline muted></video> <!-- Changed to <video> and muted -->
+        </div>
+
+        <div class="instructions-container">
+            <div id="instructionText">Please click 'Start Camera' to begin.</div>
+            <div id="countdownText"></div>
+            <div id="errorMessage"></div>
+        </div>
+
+        <div class="progress-container">
+            <div id="overallProgressText">Images Captured: 0 / {{ max_images }}</div>
+            <div class="progress-bar">
+                <div class="progress" id="captureProgress" style="width: 0%;">0%</div>
+            </div>
+        </div>
+
+        <div id="statusMessage" class="status"></div> <!-- General status messages -->
+
+        <div class="controls">
+            <button id="startButton" class="button">Start Camera</button>
+            <!-- Capture button can be a manual override or for testing -->
+            <button id="captureButton" class="button" disabled>Manual Capture (Debug)</button>
+            <button id="submitButton" class="button" disabled>Submit Registration</button>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const startButton = document.getElementById('startButton');
+        const captureButton = document.getElementById('captureButton'); // Manual capture
+        const submitButton = document.getElementById('submitButton');
+        
+        const instructionText = document.getElementById('instructionText');
+        const countdownText = document.getElementById('countdownText');
+        const errorMessageElement = document.getElementById('errorMessage');
+        const overallProgressText = document.getElementById('overallProgressText');
+        const captureProgressBar = document.getElementById('captureProgress');
+        const statusMessageElement = document.getElementById('statusMessage'); // Renamed for clarity
+
+        const POSES = JSON.parse('{{ poses_json | safe }}');
+        const MAX_IMAGES_TO_CAPTURE = parseInt('{{ max_images }}');
+        const CLIENT_CAPTURE_DELAY_SECONDS = parseInt('{{ capture_delay_ms }}') / 1000; // From Flask, in seconds
+
+        let clientStream = null;
+        let currentPoseIndex = 0; // Client's view of current pose
+        let totalImagesCapturedByClient = 0; // Client's count, server is source of truth via SSE
+        let isCameraActive = false;
+        
+        let faceDetectionIntervalId = null;
+        let faceDetectedConsistentlyTimerId = null;
+        let faceDetectionDebounce = null; // For face_detected POST
+        const FACE_DETECTION_INTERVAL_MS = 700; // How often to check for face on client
+        const FACE_POST_DEBOUNCE_MS = 300; // How often to POST face detection status (shorter than interval)
+
+
+        // --- Client-Side Face Detection (Simplified, using dummy for now) ---
+        // For actual client-side detection, you'd integrate a library like face-api.js
+        // This is a placeholder to simulate client-side detection logic
+        async function isClientFaceDetected() {
+            // Placeholder: In a real app, use face-api.js or similar on the videoElement
+            // For now, let's assume a face is detected if camera is on.
+            // More advanced: check if videoElement has valid data / brightness etc.
+            return videoElement.readyState >= videoElement.HAVE_CURRENT_DATA && videoElement.videoWidth > 0;
+        }
+
+        async function notifyServerFaceDetectionStatus(detected) {
+            if (totalImagesCapturedByClient >= MAX_IMAGES_TO_CAPTURE || !isCameraActive) {
+                console.log("CLIENT REG DEBUG: notifyServer - conditions not met, returning.");
+                return;
+            }
+            console.log(`CLIENT REG DEBUG: notifyServer - Attempting fetch to /upload_face_fr. Detected: ${detected}, Pose Index: ${currentPoseIndex}`);
+            try {
+                // console.log(`Notifying server: face detected = ${detected}, pose_index = ${currentPoseIndex}`);
+                const response = await fetch("{{ url_for('upload_face_fr') }}", {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ detected: detected, pose_index: currentPoseIndex })
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // console.log("Server response to face detection: ", data);
+                    if (data.action === "trigger_capture") {
+                        // Server says conditions met, client should now take picture
+                        console.log("Server instructed client to trigger capture for pose:", data.pose_name);
+                        await performCapture();
+                    }
+                    // Instruction updates will primarily come from SSE for smoother UI
+                } else {
+                    console.error("Error notifying server of face detection:", response.status);
+                }
+            } catch (error) {
+                console.error("Failed to send face detection status:", error);
+            }
+        }
+
+
+        async function performCapture(isManual = false) {
+            if (!isCameraActive || totalImagesCapturedByClient >= MAX_IMAGES_TO_CAPTURE) return;
+
+            // Disable manual capture button during any capture attempt
+            captureButton.disabled = true;
+            showStatus("Capturing...", "info", 2000);
+            instructionText.textContent = `Capturing for ${POSES[currentPoseIndex % POSES.length].toUpperCase()}...`;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+            const ctx = canvas.getContext('2d');
+            // Flip the image back to normal before sending (because display is mirrored)
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+
+
+            try {
+                const response = await fetch("{{ url_for('upload_face_fr') }}", {
+                    method: 'POST',
+                    body: canvas.toDataURL('image/jpeg'),
+                    headers: { 'X-Current-Pose-Name': POSES[currentPoseIndex % POSES.length] } // Inform server of current pose
+                });
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    // totalImagesCapturedByClient will be updated by SSE from server's total_images_captured
+                    // This prevents desync if a capture fails but client thought it succeeded.
+                    // For now, let's optimistically update client, but rely on SSE.
+                    // totalImagesCapturedByClient = result.images_captured;
+                    // updateOverallProgress();
+                    
+                    // Client advances its local pose index for next instruction guidance
+                    // Server state for current_pose_index in registration_process_state will be updated by
+                    // the 'face_detected_registration' POST if client sends its current pose index
+                    currentPoseIndex = (currentPoseIndex + 1) % POSES.length;
+
+                    // Reset auto-capture related flags on client too
+                    clearTimeout(faceDetectedConsistentlyTimerId);
+                    faceDetectedConsistentlyTimerId = null;
+                    countdownText.textContent = "";
+
+
+                    showStatus(result.message || `Image capture attempt sent!`, 'success');
+                    // Next instruction will come from SSE based on server's updated state.
+                } else {
+                    showStatus(result.message || 'Failed to process image on server.', 'error');
+                }
+            } catch (err) {
+                console.error('Capture POST error:', err);
+                showStatus('Error sending image: ' + err.message, 'error');
+            } finally {
+                 if (totalImagesCapturedByClient < MAX_IMAGES_TO_CAPTURE && isCameraActive) {
+                    captureButton.disabled = false; // Re-enable manual capture
+                }
+            }
+        }
+
+
+        async function startClientCamera() {
+            console.log("startClientCamera: function called.");
+            if (clientStream) {
+                console.log("startClientCamera: Stopping existing stream.");
+                clientStream.getTracks().forEach(track => track.stop());
+                clientStream = null; // Ensure clientStream is reset
+            }
+            try {
+                console.log("startClientCamera: Attempting navigator.mediaDevices.getUserMedia...");
+                clientStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // clientStream = await navigator.mediaDevices.getUserMedia({
+                //     video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }
+                // });
+                console.log("startClientCamera: getUserMedia success. Stream obtained:", clientStream); 
+                
+                videoElement.srcObject = clientStream;
+console.log("startClientCamera: srcObject set. Video readyState:", videoElement.readyState);
+
+videoElement.oncanplay = () => { // Alternative/additional event
+    console.log("startClientCamera: video canplay event fired.");
+    videoElement.play().then(() => {
+        console.log("startClientCamera: video play from oncanplay initiated successfully.");
+    }).catch(e => {
+        console.error("startClientCamera: Video play error from oncanplay:", e);
+    });
+};
+
+videoElement.onloadedmetadata = () => {
+    console.log("startClientCamera: video metadata loaded. Video readyState:", videoElement.readyState);
+    videoElement.play().then(() => {
+        console.log("startClientCamera: video play from onloadedmetadata initiated successfully.");
+    }).catch(e => {
+        console.error("startClientCamera: Video play error from onloadedmetadata:", e);
+    });
+};
+
+// Attempt direct play as well, in case events are tricky
+setTimeout(() => { // Give srcObject a moment to bind
+    if (videoElement.paused) { // Only if not already playing
+         console.log("startClientCamera: Attempting direct play after timeout. ReadyState:", videoElement.readyState);
+         videoElement.play().then(() => {
+             console.log("startClientCamera: Direct play initiated successfully.");
+         }).catch(e => {
+             console.error("startClientCamera: Direct play error:", e);
+             if (!errorMessageElement.textContent) { // Don't overwrite more specific errors
+                 errorMessageElement.textContent = `Video direct play error: ${e.name}.`;
+             }
+         });
+    }
+}, 100); // 100ms delay
+
+                isCameraActive = true;
+                startButton.textContent = 'Camera Active';
+                startButton.disabled = true;
+                captureButton.disabled = false; 
+                showStatus('Camera started. Follow instructions.', 'success'); // Ensure showStatus is defined and works
+                
+                if(faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+                faceDetectionIntervalId = setInterval(async () => {
+                    if (!isCameraActive || totalImagesCapturedByClient >= MAX_IMAGES_TO_CAPTURE) {
+                        // console.log("CLIENT REG DEBUG: Interval cleared or condition not met.");
+                        if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+                        return;
+                    }
+                    const detected = await isClientFaceDetected();
+                    console.log(`CLIENT REG DEBUG: Interval running. isClientFaceDetected() = ${detected}. Current client pose index: ${currentPoseIndex}`);
+
+                    // This debounce logic is to prevent spamming the server if 'detected' status flips rapidly.
+                    // If 'detected' is consistently true, it should fire.
+                    clearTimeout(faceDetectionDebounce);
+                    faceDetectionDebounce = setTimeout(() => {
+                         console.log("CLIENT REG DEBUG: Debounce fired. Calling notifyServerFaceDetectionStatus().");
+                         notifyServerFaceDetectionStatus(detected);
+                    }, FACE_POST_DEBOUNCE_MS);
+                }, FACE_DETECTION_INTERVAL_MS);
+
+            } catch (err) {
+                console.error("startClientCamera: getUserMedia error:", err);
+                console.error("Error Name:", err.name); 
+                console.error("Error Message:", err.message);
+
+                instructionText.textContent = "Could not access camera.";
+                errorMessageElement.textContent = `Camera Error: ${err.name}. Check permissions or if camera is in use. Details: ${err.message}`;
+                showStatus(`Failed to start camera: ${err.name}`, 'error'); // Ensure showStatus is defined
+                isCameraActive = false;
+                if (clientStream) { // Clean up if stream was partially obtained but an error occurred later
+                     clientStream.getTracks().forEach(track => track.stop());
+                     clientStream = null;
+                }
+            }
+        }
+
+        startButton.addEventListener('click', startClientCamera);
+        captureButton.addEventListener('click', () => performCapture(true)); // Manual capture
+
+        submitButton.addEventListener('click', async () => {
+            if (totalImagesCapturedByClient < MAX_IMAGES_TO_CAPTURE && 
+                !confirm("You have not captured images for all poses. Are you sure you want to submit with current images?")) {
+                return;
+            }
+            showStatus("Completing registration...", "info");
+            submitButton.disabled = true;
+            try {
+                const response = await fetch("{{ url_for('complete_registration_fr') }}", {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (response.ok && result.status === 'success') {
+                    showStatus('Registration successful! Redirecting...', 'success');
+                    if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+                    if (eventSource) eventSource.close();
+                    setTimeout(() => { window.location.href = "{{ url_for('login_fr_page') }}"; }, 2000);
+                } else {
+                    showStatus(result.message || 'Registration failed.', 'error');
+                    submitButton.disabled = (totalImagesCapturedByClient < MAX_IMAGES_TO_CAPTURE);
+                }
+            } catch (err) {
+                showStatus('Error submitting: ' + err.message, 'error');
+                submitButton.disabled = (totalImagesCapturedByClient < MAX_IMAGES_TO_CAPTURE);
+            }
+        });
+
+        function updateOverallUIProgress(serverTotalCaptured) {
+            totalImagesCapturedByClient = serverTotalCaptured; // Update client's count from server
+            const percentage = (totalImagesCapturedByClient / MAX_IMAGES_TO_CAPTURE) * 100;
+            captureProgressBar.style.width = `${percentage}%`;
+            captureProgressBar.textContent = `${Math.round(percentage)}%`;
+            overallProgressText.textContent = `Images Captured: ${totalImagesCapturedByClient} / ${MAX_IMAGES_TO_CAPTURE}`;
+
+            if (totalImagesCapturedByClient >= MAX_IMAGES_TO_CAPTURE) {
+                instructionText.textContent = "All images captured! Ready to submit.";
+                captureButton.disabled = true; // Disable manual capture
+                submitButton.disabled = false;
+                if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId); // Stop polling
+                // SSE might be closed by server or client here.
+            } else {
+                submitButton.disabled = true;
+                captureButton.disabled = !isCameraActive; // Re-enable manual if camera is on
+            }
+        }
+
+        // SSE Handling for instructions and progress
+        let eventSource = null;
+        function setupSSE() {
+            if (eventSource) { eventSource.close(); }
+            eventSource = new EventSource("{{ url_for('registration_status_feed_fr_endpoint') }}");
+            console.log("SSE for /registration_status_feed connecting...");
+
+            eventSource.onopen = () => console.log("SSE connection opened for registration status.");
+            
+            eventSource.onmessage = function(event) {
+    // console.log("REG_SSE_RAW_DATA_RECEIVED_BY_CLIENT:", event.data); // Keep this for debugging
+
+    let jsonDataToParse = event.data;
+    // Check if the event.data string itself starts with "data: " and strip it if necessary.
+    // This is a workaround for an unusual behavior if the browser's EventSource is misbehaving
+    // or if the server is somehow sending an extra "data:" prefix that gets through.
+    if (typeof event.data === 'string' && event.data.startsWith("data:")) {
+        console.warn("REG_SSE: Detected 'data: ' prefix in event.data. Attempting to strip it. Original:", event.data);
+        jsonDataToParse = event.data.substring(event.data.indexOf('{')); // Try to get from the first '{'
+        // A more robust way if it's always "data: " followed by JSON:
+        // jsonDataToParse = event.data.substring(5).trim(); // Strips "data:" (5 chars) + trims whitespace
+    }
+
+    // console.log("REG_SSE_DATA_TO_PARSE:", jsonDataToParse);
+
+    if (typeof jsonDataToParse === 'string' && jsonDataToParse.trim() !== "") {
+        try {
+            const data = JSON.parse(jsonDataToParse); // Attempt to parse the (potentially corrected) string
+            console.log("REG_SSE_PARSED_DATA:", data);
+            
+            if(data.instruction) instructionText.textContent = data.instruction;
+            errorMessageElement.textContent = data.error_message || ""; 
+            
+            if(data.auto_capture_countdown !== undefined && data.auto_capture_countdown !== null) {
+                countdownText.textContent = `Auto-capturing in: ${data.auto_capture_countdown}s`;
+            } else if (data.face_detected_for_auto_capture && data.status && data.status.startsWith("capturing_pose_")) { // Only show "hold still" if actively capturing
+                countdownText.textContent = "Face detected, hold still...";
+            } else {
+                countdownText.textContent = "";
+            }
+
+            if (data.total_images_captured_for_user !== undefined) {
+                updateOverallUIProgress(data.total_images_captured_for_user);
+            }
+
+            // Handle overall status changes for UI feedback
+            if (data.status === 'error_final' && data.error_message) {
+                showStatus(data.error_message, 'error');
+                // Potentially re-enable start button or guide user
+            } else if (data.status === 'all_poses_captured_pending_save') {
+                submitButton.disabled = false;
+                captureButton.disabled = true; // No more captures needed
+                if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+            } else if (data.status === 'idle' || data.status === 'error_camera_unavailable') {
+                // Reset UI if server indicates an idle state or major camera error
+                startButton.disabled = false;
+                startButton.textContent = 'Start Camera';
+                isCameraActive = false;
+                if (clientStream) clientStream.getTracks().forEach(track => track.stop());
+                clientStream = null;
+                if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+            }
+
+        } 
+        catch (e) { 
+            console.error("REG_SSE_JSON_PARSE_ERROR:", e, "Problematic Raw Data was:", event.data, "Attempted to parse:", jsonDataToParse); 
+            errorMessageElement.textContent = "Error receiving status updates from server.";
+        }
+    } else {
+        // console.warn("REG_SSE: Received empty, null, or non-string data. Skipping parse. Raw data:", event.data);
+    }
+};
+            eventSource.onerror = function(err) {
+                console.error("Reg EventSource error:", err);
+                errorMessageElement.textContent = "Status update connection lost.";
+                if (eventSource) eventSource.close();
+                // Optionally try to reconnect
+                // setTimeout(setupSSE, 5000);
+            };
+        }
+        
+        // Initial UI setup
+        updateOverallUIProgress(0); // Initialize progress display
+        setupSSE();
+
+        window.addEventListener('beforeunload', () => {
+            if (clientStream) clientStream.getTracks().forEach(track => track.stop());
+            if (faceDetectionIntervalId) clearInterval(faceDetectionIntervalId);
+            clearTimeout(faceDetectionDebounce);
+            clearTimeout(faceDetectedConsistentlyTimerId);
+            if (eventSource && eventSource.readyState !== EventSource.CLOSED) eventSource.close();
+        });
+
+        // Ensure showStatus is defined:
+        function showStatus(message, type, duration = 3000) {
+            if (!statusMessageElement) {
+                console.warn("statusMessageElement not found for showStatus");
+                alert(`${type.toUpperCase()}: ${message}`); // Fallback to alert
+                return;
+            }
+            statusMessageElement.textContent = message;
+            statusMessageElement.className = `status ${type}`; // Ensure 'status' base class is kept
+            statusMessageElement.style.display = 'block'; // Make sure it's visible
+            if (duration) {
+                setTimeout(() => {
+                    if (statusMessageElement) statusMessageElement.style.display = 'none';
+                }, duration);
+            }
+        }
+    </script>
+</body>
+</html>

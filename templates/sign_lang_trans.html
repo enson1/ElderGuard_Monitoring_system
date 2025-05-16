@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ASL Translator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    /* Basic styling for range input */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      background: #d3d3d3;
+      outline: none;
+      opacity: 0.7;
+      -webkit-transition: .2s;
+      transition: opacity .2s;
+      border-radius: 4px;
+    }
+
+    input[type=range]:hover {
+      opacity: 1;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #4f46e5; /* Indigo */
+      cursor: pointer;
+      border-radius: 50%;
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #4f46e5; /* Indigo */
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+    }
+
+    /* Basic styling for toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px; /* Reduced width */
+      height: 24px; /* Reduced height */
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 24px; /* Adjusted border-radius */
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px; /* Reduced height */
+      width: 18px;  /* Reduced width */
+      left: 3px;    /* Adjusted position */
+      bottom: 3px;  /* Adjusted position */
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #4f46e5; /* Indigo */
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #4f46e5; /* Indigo */
+    }
+
+    input:checked + .slider:before {
+      -webkit-transform: translateX(26px); /* Adjusted translation */
+      -ms-transform: translateX(26px);
+      transform: translateX(26px);
+    }
+
+    /* High Contrast Mode */
+    body.high-contrast {
+        background-color: #000;
+        color: #fff;
+    }
+    body.high-contrast .bg-white,
+    body.high-contrast .bg-gray-100,
+    body.high-contrast .bg-blue-50 {
+        background-color: #1a1a1a; /* Darker background for elements */
+        color: #fff;
+        border: 1px solid #fff;
+    }
+     body.high-contrast .bg-blue-100 {
+        background-color: #000033; /* Darker blue */
+        color: #fff;
+        border: 1px solid #fff;
+     }
+    body.high-contrast .text-gray-700,
+    body.high-contrast .text-gray-500,
+    body.high-contrast .text-indigo-700,
+    body.high-contrast .text-indigo-800,
+    body.high-contrast .text-indigo-900 {
+        color: #fff;
+    }
+    /* Add specific rule for translation output text */
+    body.high-contrast #translation-output {
+        color: #fff; /* Ensure white text */
+        background-color: #1a1a1a; /* Ensure dark background */
+        border-color: #fff; /* Ensure white border */
+    }
+    body.high-contrast button {
+        border: 1px solid #fff;
+    }
+    body.high-contrast input[type=range] {
+        background: #555;
+    }
+    body.high-contrast input[type=range]::-webkit-slider-thumb {
+        background: #ffff00; /* Yellow thumb */
+    }
+    body.high-contrast input[type=range]::-moz-range-thumb {
+        background: #ffff00; /* Yellow thumb */
+    }
+    body.high-contrast .switch .slider {
+        background-color: #555;
+    }
+    body.high-contrast input:checked + .slider {
+        background-color: #ffff00; /* Yellow */
+    }
+     body.high-contrast .border {
+        border-color: #fff;
+     }
+
+  </style>
+</head>
+<body class="bg-gray-100 font-sans text-base"> <!-- Default text size -->
+  <div class="container mx-auto p-6 max-w-6xl">
+
+    <!-- Header -->
+    <header class="text-center mb-10">
+      <h1 class="text-5xl font-bold text-indigo-900 mt-1">ASL Translator</h1>
+      <p class="text-gray-600 mt-2">Bridging communication gaps with intuitive sign language translation</p>
+    </header>
+
+    <!-- Main Content: Camera and Translation -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+      <!-- Camera View Section -->
+      <section class="bg-white rounded-lg shadow-md overflow-hidden">
+        <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+          <i class="fas fa-camera mr-2"></i>Camera View
+        </header>
+        <div class="p-4 flex flex-col items-center">
+          <div id="camera-placeholder" class="w-full h-64 bg-gray-300 rounded flex items-center justify-center text-gray-500 mb-4">
+            <!-- Webcam feed will replace this -->
+            <div class="text-center">
+              <i class="fas fa-video fa-3x mb-2"></i>
+              <p>Click "Start Camera" to begin</p>
+            </div>
+          </div>
+           <img id="webcam-feed" src="" alt="Live ASL Feed" class="rounded border w-full max-w-md hidden"> <!-- Initially hidden -->
+          <button id="start-camera-btn" onclick="startCamera()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center">
+            <i class="fas fa-play mr-2"></i>Start Camera
+          </button>
+           <button id="stop-camera-btn" onclick="stopCamera()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center mt-2 hidden">
+             <i class="fas fa-stop mr-2"></i>Stop Camera
+           </button>
+        </div>
+      </section>
+
+      <!-- Translation Section -->
+      <section class="bg-white rounded-lg shadow-md overflow-hidden">
+        <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+          <i class="fas fa-language mr-2"></i>Translation
+        </header>
+        <div class="p-4 flex flex-col"> 
+          <div id="translation-output" class="flex-grow bg-gray-50 border rounded p-3 mb-4 text-gray-700 min-h-[150px] text-lg">
+            Translation will appear here...
+          </div>
+          <div class="flex justify-between items-center">
+            <button onclick="clearText()" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center">
+              <i class="fas fa-trash mr-2"></i>Clear
+            </button>
+            <button onclick="speakText(document.getElementById('translation-output').textContent)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center">
+              <i class="fas fa-volume-up mr-2"></i>Speak
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Common Phrases Section -->
+    <section class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+      <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+        <i class="fas fa-comments mr-2"></i>Common Phrases
+      </header>
+      <div class="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button onclick="selectPhrase('Hello')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">Hello</button>
+        <button onclick="selectPhrase('Thank you')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">Thank you</button>
+        <button onclick="selectPhrase('Please')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">Please</button>
+        <button onclick="selectPhrase('Yes')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">Yes</button>
+        <button onclick="selectPhrase('No')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">No</button>
+        <button onclick="selectPhrase('Help')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">Help</button>
+        <button onclick="selectPhrase('I need water')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">I need water</button>
+        <button onclick="selectPhrase('How are you?')" class="bg-blue-50 hover:bg-blue-200 text-indigo-700 font-medium py-3 px-4 rounded-lg border border-blue-200">How are you?</button>
+      </div>
+    </section>
+
+    <!-- Settings Section -->
+    <section class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+      <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+        <i class="fas fa-cog mr-2"></i>Settings
+      </header>
+      <div class="p-4 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+        <!-- Text Size -->
+        <div>
+          <label for="text-size-slider" class="block font-medium text-gray-700 mb-2">Text Size</label>
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-500">Small</span>
+            <!-- Ensure oninput calls changeTextSize -->
+            <input type="range" id="text-size-slider" min="12" max="24" value="16" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" oninput="changeTextSize(this.value)">
+            <span class="text-sm text-gray-500">Large</span>
+          </div>
+        </div>
+        <!-- High Contrast Mode -->
+        <div class="flex items-center justify-between">
+          <label for="high-contrast-toggle" class="font-medium text-gray-700">High Contrast Mode</label>
+          <div class="flex flex-col items-center">
+             <label class="switch">
+                <!-- Ensure onchange calls toggleHighContrast -->
+                <input type="checkbox" id="high-contrast-toggle" onchange="toggleHighContrast(this.checked)">
+                <span class="slider round"></span>
+              </label>
+              <!-- Removed redundant text, toggle implies purpose -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Floating Help Button -->
+    <button id="floating-help-btn" class="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-700 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl z-50"> <!-- Added z-index -->
+      <i class="fas fa-question"></i>
+    </button>
+
+  </div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6 relative">
+      <!-- Modal Header -->
+      <h2 class="text-2xl font-bold text-indigo-800 mb-4 text-center">How to Use the ASL Translator</h2>
+
+      <!-- Modal Body -->
+      <div class="space-y-3 text-gray-700">
+        <div>
+          <h3 class="font-semibold text-indigo-700">Step 1: Start the Camera</h3>
+          <p class="text-sm">Click the "Start Camera" button to activate your device's camera.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-indigo-700">Step 2: Sign in View</h3>
+          <p class="text-sm">Make sure your hands are clearly visible in the camera view.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-indigo-700">Step 3: View Translation</h3>
+          <p class="text-sm">The translation of your signs will appear in the translation box.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-indigo-700">Step 4: Use Common Phrases</h3>
+          <p class="text-sm">Click on any common phrase button to quickly display that phrase.</p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-indigo-700">Adjust Settings</h3>
+          <p class="text-sm">Use the settings section to change text size and contrast for better visibility.</p>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="mt-6 text-center">
+        <button id="close-help-modal-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg">
+          Close Help
+        </button>
+      </div>
+
+       <!-- Optional: Add a close icon button at the top-right -->
+       <!-- <button id="close-help-modal-icon-btn" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-2xl">
+            &times;  entity for multiplication sign (X)
+       </button> -->
+
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+    const webcamFeed = document.getElementById('webcam-feed');
+    const cameraPlaceholder = document.getElementById('camera-placeholder');
+    const startBtn = document.getElementById('start-camera-btn');
+    const stopBtn = document.getElementById('stop-camera-btn');
+    const translationOutput = document.getElementById('translation-output');
+    const textSizeSlider = document.getElementById('text-size-slider');
+    const highContrastToggle = document.getElementById('high-contrast-toggle');
+    const helpModal = document.getElementById('help-modal');
+    const floatingHelpBtn = document.getElementById('floating-help-btn'); // Get button by new ID
+    const closeHelpModalBtn = document.getElementById('close-help-modal-btn');
+    // const closeHelpModalIconBtn = document.getElementById('close-help-modal-icon-btn'); // Uncomment if using the icon button
+
+    let updateInterval = null; // To store the interval ID
+    const PLACEHOLDER_TEXT = 'Translation will appear here...';
+    let isStopping = false; // Keep this flag
+
+    // --- Modal Functions ---
+    function showHelpModal() {
+      if (helpModal) {
+        helpModal.classList.remove('hidden'); // Show the modal
+      }
+    }
+
+    function hideHelpModal() {
+      if (helpModal) {
+        helpModal.classList.add('hidden'); // Hide the modal
+      }
+    }
+
+    async function startCamera() {
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting...';
+        cameraPlaceholder.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin fa-3x mb-2"></i><p>Requesting camera access...</p></div>';
+        cameraPlaceholder.classList.remove('hidden');
+        webcamFeed.classList.add('hidden');
+
+         // --- Define error handler specific to this start attempt ---
+        const handleStreamError = () => {
+            console.error("Failed to load webcam feed stream (onerror event).");
+            cameraPlaceholder.innerHTML = '<div class="text-center text-red-500"><i class="fas fa-exclamation-triangle fa-3x mb-2"></i><p>Error: Could not display video stream.</p></div>';
+            cameraPlaceholder.classList.remove('hidden');
+            webcamFeed.classList.add('hidden');
+            webcamFeed.src = ""; // Clear src on error
+
+             // Ensure buttons are reset correctly after a load error
+            stopBtn.classList.add('hidden');
+            startBtn.classList.remove('hidden');
+            startBtn.disabled = false;
+            startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Camera';
+
+            if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
+
+            // Don't call stop_camera endpoint here. Error happened before stopping was requested.
+            // If backend *did* partially start, it should ideally time out or be handled differently.
+            // Calling stop might conflict if the user tries to start again quickly.
+            console.log("Stream error handler executed.");
+
+            // Remove listeners to prevent future triggers
+            webcamFeed.onload = null;
+            webcamFeed.onerror = null;
+        };
+
+         // --- Define success handler specific to this start attempt ---
+        const handleStreamLoad = () => {
+            console.log("Webcam feed stream connected (onload event).");
+            webcamFeed.classList.remove('hidden');
+            cameraPlaceholder.classList.add('hidden');
+            startBtn.classList.add('hidden');
+            stopBtn.classList.remove('hidden'); // Show stop button
+
+            // Start fetching updates only after stream is confirmed working
+            if (!updateInterval) {
+                updateInterval = setInterval(updateText, 300);
+                updateText(); // Initial fetch
+            }
+             // Remove listeners after successful load? Optional, but can prevent unexpected triggers.
+             // webcamFeed.onload = null; // Needed if needed for reconnections? Usually not for simple MJPEG.
+             // webcamFeed.onerror = null; // Need error to catch subsequent stream drops. Re-evaluate if needed.
+             // Let's keep onerror, but ensure it doesn't call stopCamera().
+             // webcamFeed.onerror = handleStreamError; // Error points to the clean handler IF kept.
+             // For simplicity, let's remove both after successful load for now.
+             webcamFeed.onload = null;
+             webcamFeed.onerror = null;
+
+        };
+
+         // --- Attach handlers and request backend start ---
+        webcamFeed.onload = handleStreamLoad;
+        webcamFeed.onerror = handleStreamError; // Use specific error handler
+
+        try {
+            console.log("Sending POST /start_camera request...");
+            const response = await fetch('/start_camera', { method: 'POST' });
+            const data = await response.json();
+
+            if (response.ok && data.status === 'success') {
+                console.log("Backend confirmed camera start. Setting feed source...");
+                // --- Success: Now set the feed source ---
+                webcamFeed.src = "{{ url_for('video_feed') }}"; // Trigger the stream
+
+            } else {
+                // --- Backend reported an error starting ---
+                console.error("Backend failed to start camera:", data.message);
+                // Use handleStreamError logic display the message visually
+                handleStreamError(); // Trigger UI update for error
+            }
+        } catch (error) {
+            // --- Network or other fetch error ---
+            console.error("Error calling /start_camera endpoint:", error);
+            cameraPlaceholder.innerHTML = '<div class="text-center text-red-500"><i class="fas fa-network-wired fa-3x mb-2"></i><p>Error communicating with server.</p></div>';
+              // Clean up UI state consistently on fetch error
+             cameraPlaceholder.classList.remove('hidden');
+             webcamFeed.classList.add('hidden');
+             webcamFeed.src = "";
+             stopBtn.classList.add('hidden');
+             startBtn.classList.remove('hidden');
+             startBtn.disabled = false;
+             startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Camera';
+             if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
+             // Remove listeners on fetch error too
+             webcamFeed.onload = null;
+             webcamFeed.onerror = null;
+        }
+        // Removed the 'finally' block resetting the start button here,
+        // the success/error handlers now manage the button states correctly.
+    }
+
+    async function stopCamera() {
+        if (isStopping) {
+            console.log("Stop request already in progress.");
+            return;
+        }
+        isStopping = true;
+        console.log("--- Stop Camera Action ---");
+
+        stopBtn.disabled = true;
+        stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Stopping...';
+
+        // Stop fetching text updates immediately
+        if (updateInterval) {
+            console.log("Clearing update interval.");
+            clearInterval(updateInterval);
+            updateInterval = null;
+        }
+
+        // --- Explicitly remove event handlers BEFORE changing src ---
+        console.log("Removing webcamFeed event handlers.");
+        webcamFeed.onload = null;
+        webcamFeed.onerror = null;
+
+        // --- Set src to empty AFTER removing handlers ---
+        console.log("Setting webcamFeed.src to empty string.");
+        webcamFeed.src = ""; // Clear source to stop the stream request
+
+        try {
+            console.log("Sending POST /stop_camera request...");
+            const response = await fetch('/stop_camera', { method: 'POST' });
+            const data = await response.json();
+
+            if (response.ok && data.status === 'success') {
+                console.log("Backend confirmed camera stop.");
+            } else {
+                console.error("Backend reported issue stopping camera:", data.message);
+            }
+        } catch (error) {
+            console.error("Error calling /stop_camera endpoint:", error);
+        } finally {
+              // --- Update UI ---
+             console.log("Updating frontend UI for stopped state.");
+             webcamFeed.classList.add('hidden');
+             cameraPlaceholder.innerHTML = '<div class="text-center"><i class="fas fa-video fa-3x mb-2"></i><p>Click "Start Camera" to begin</p></div>';
+             cameraPlaceholder.classList.remove('hidden');
+             startBtn.classList.remove('hidden');
+             stopBtn.classList.add('hidden');
+             stopBtn.disabled = false; // Re-enable for future use
+             stopBtn.innerHTML = '<i class="fas fa-stop mr-2"></i>Stop Camera';
+
+             startBtn.disabled = false;
+             startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Camera';
+
+             translationOutput.textContent = PLACEHOLDER_TEXT;
+             console.log("Camera stopped (frontend perspective).");
+             isStopping = false; // Reset flag
+        }
+    }
+
+    function speakText(text) {
+      const textToSpeak = text === PLACEHOLDER_TEXT ? '' : text;
+      if (!textToSpeak.trim()) {
+          console.log("Nothing to speak.");
+          return;
+      }
+      const synth = window.speechSynthesis;
+      if (synth.speaking) {
+          synth.cancel();
+          setTimeout(() => {
+              const utter = new SpeechSynthesisUtterance(textToSpeak);
+              utter.lang = 'en-US'; utter.pitch = 1; utter.rate = 0.9;
+              synth.speak(utter);
+          }, 100);
+      } else {
+          const utter = new SpeechSynthesisUtterance(textToSpeak);
+          utter.lang = 'en-US'; utter.pitch = 1; utter.rate = 0.9;
+          synth.speak(utter);
+      }
+    }
+
+    async function clearText() {
+      const clearButton = document.querySelector('button[onclick="clearText()"]');
+      clearButton.disabled = true; // Disable button
+      clearButton.classList.add('opacity-50', 'cursor-not-allowed'); // Visual feedback
+
+      translationOutput.textContent = PLACEHOLDER_TEXT; // Optimistic UI update
+
+      try {
+          const response = await fetch('/clear_text', { method: 'POST' });
+          const data = await response.json();
+          console.log('Backend clear response:', data);
+          if (data.status !== 'success') {
+              console.error('Backend failed to clear text:', data.message);
+          }
+      } catch (error) {
+          console.error('Error calling /clear_text endpoint:', error);
+      } finally {
+          clearButton.disabled = false; // Re-enable button
+          clearButton.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+      console.log("Frontend text visually cleared, backend clear requested.");
+    }
+
+    function selectPhrase(phrase) {
+      translationOutput.textContent = phrase;
+    }
+
+    function changeTextSize(sizeValue) {
+        const size = parseInt(sizeValue, 10);
+        let sizeClass = 'text-base';
+        if (size <= 13) sizeClass = 'text-sm';
+        else if (size <= 16) sizeClass = 'text-base';
+        else if (size <= 20) sizeClass = 'text-lg';
+        else if (size <= 24) sizeClass = 'text-xl';
+        document.body.className = document.body.className.replace(/text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)/g, '');
+        document.body.classList.add(sizeClass);
+        console.log("Text size changed to:", size, "Applied class:", sizeClass);
+    }
+
+
+    function toggleHighContrast(enabled) {
+      if (enabled) {
+        document.body.classList.add('high-contrast');
+        console.log("High contrast enabled");
+      } else {
+        document.body.classList.remove('high-contrast');
+        console.log("High contrast disabled");
+      }
+    }
+
+    // Function to fetch updated text data from the server
+    async function updateText() {
+        // Only fetch if the camera *should* be running (stop button is visible)
+        if (stopBtn.classList.contains('hidden')) {
+            // This check might be useful if the interval somehow keeps running after stop clicked
+             if (updateInterval) {
+                 console.warn("updateText called while stop button hidden, clearing interval again.");
+                 clearInterval(updateInterval);
+                 updateInterval = null;
+             }
+            return;
+        }
+
+        try {
+            const response = await fetch('/get_text');
+            if (!response.ok) {
+                console.error("Failed to fetch text data:", response.status, response.statusText);
+                 // Handle service unavailable (detector/camera error)
+                 if(response.status === 503 || response.status === 500) {
+                     const errorData = await response.json();
+                     // Display the specific error message from the backend
+                     if (translationOutput.textContent !== errorData.translated_text) {
+                        translationOutput.textContent = errorData.translated_text || "Error fetching status.";
+                     }
+                 }
+                return;
+            }
+            const data = await response.json();
+
+            // Update the translation output
+            const newText = data.translated_text || ''; // Default to empty string if null/undefined
+
+            // Handle empty text or specific messages like "Camera stopped."
+            if (newText.trim() === '' || newText === "Camera stopped.") {
+                 // Determine the appropriate message or placeholder
+                 const messageToShow = (newText === "Camera stopped.") ? newText : PLACEHOLDER_TEXT;
+                 if (translationOutput.textContent !== messageToShow) {
+                     translationOutput.textContent = messageToShow;
+                 }
+            } else if (translationOutput.textContent !== newText) {
+                 // Otherwise, update if the new text is different and not empty/placeholder
+                translationOutput.textContent = newText;
+            }
+
+            // Update detected letter/stable candidate (if you add elements for them later)
+            // const currentLetterElement = document.getElementById('current-letter');
+            // if (currentLetterElement) {
+            //     currentLetterElement.textContent = data.raw_prediction || '-';
+            // }
+            // const stableCandElement = document.getElementById('stable-candidate');
+            // if (stableCandElement && stableCandElement.textContent !== (data.stable_candidate || '-')) {
+            //     stableCandElement.textContent = data.stable_candidate || '-';
+            // }
+
+        } catch (error) {
+            console.error("Error fetching or processing text data:", error);
+            // Maybe display a generic fetch error in the translation box?
+             translationOutput.textContent = "Error fetching updates.";
+        }
+    }
+
+    // Initial setup function
+    function initializeUI() {
+         changeTextSize(textSizeSlider.value);
+         // Set initial state to stopped
+        webcamFeed.src = ""; // Ensure src is initially empty
+        webcamFeed.onload = null; // Ensure handlers are initially null
+        webcamFeed.onerror = null;
+        webcamFeed.classList.add('hidden');
+        cameraPlaceholder.classList.remove('hidden');
+        cameraPlaceholder.innerHTML = '<div class="text-center"><i class="fas fa-video fa-3x mb-2"></i><p>Click "Start Camera" to begin</p></div>'; // Reset placeholder text
+        startBtn.classList.remove('hidden');
+        startBtn.disabled = false; // Ensure start button is enabled
+        startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Camera';
+        stopBtn.classList.add('hidden');
+        stopBtn.disabled = false; // Ensure stop button is enabled (though hidden)
+        stopBtn.innerHTML = '<i class="fas fa-stop mr-2"></i>Stop Camera';
+        translationOutput.textContent = PLACEHOLDER_TEXT; // Ensure placeholder is shown initially
+        if(updateInterval) clearInterval(updateInterval); updateInterval = null; // Ensure interval is off
+        isStopping = false; // Ensure flag is reset on init
+
+        // Ensure modal is hidden on initial load
+        hideHelpModal();
+    }
+
+    // Call initialization function when the DOM is ready and set up modal listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        // Run initial UI setup
+        initializeUI();
+
+        // --- Event Listeners for Modal ---
+        if (floatingHelpBtn) {
+            // Remove the old onclick attribute from the HTML button first (if it exists)
+            floatingHelpBtn.removeAttribute('onclick'); // Remove inline handler
+            floatingHelpBtn.addEventListener('click', showHelpModal);
+        }
+        if (closeHelpModalBtn) {
+            closeHelpModalBtn.addEventListener('click', hideHelpModal);
+        }
+        // if (closeHelpModalIconBtn) { // Uncomment if using the icon button
+        //    closeHelpModalIconBtn.addEventListener('click', hideHelpModal);
+        // }
+
+        // Optional: Close modal if clicking on the background overlay
+        if (helpModal) {
+            helpModal.addEventListener('click', function(event) {
+                // Check if the click was directly on the overlay (helpModal itself)
+                if (event.target === helpModal) {
+                    hideHelpModal();
+                }
+            });
+        }
+    }); // End of DOMContentLoaded listener
+
+  </script>
+</body>
+</html>

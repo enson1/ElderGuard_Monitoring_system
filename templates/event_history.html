@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeGuard - Event History</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; /* Tailwind's default sans font */ }
+        .event-card {
+            transition: box-shadow 0.3s ease-in-out, transform 0.2s ease-in-out;
+            border-left-width: 4px;
+        }
+        .event-card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); /* Subtle hover shadow */
+        }
+        .event-card-fall { border-left-color: #ef4444; /* red-500 */ }
+        .event-card-clap { border-left-color: #06b6d4; /* cyan-500 */ }
+        .event-card-other { border-left-color: #6b7280; /* gray-500 */}
+
+
+        .video-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .video-popup-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .video-popup-content video {
+            max-width: 100%;
+            max-height: calc(90vh - 100px); /* Adjust for header/close button */
+            border-radius: 0.25rem;
+        }
+        .close-popup {
+            align-self: flex-end;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .close-popup:hover {
+            color: #1f2937;
+        }
+
+        .sidebar {
+            transition: all 0.3s ease;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                z-index: 40;
+                height: 100vh;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-overlay {
+                 position: fixed;
+                 inset: 0;
+                 background-color: rgba(0,0,0,0.5);
+                 z-index: 30;
+                 display: none;
+             }
+             .sidebar.open + .sidebar-overlay {
+                 display: block;
+             }
+        }
+        .sidebar-link-active {
+            background-color: #4338ca;
+            color: white !important;
+            font-weight: 600;
+        }
+        .hidden { display: none !important; } /* Added !important for filter */
+
+        .filter-tab {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            color: #4b5563;
+            background-color: #f3f4f6;
+            border: 1px solid #e5e7eb;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .filter-tab:hover {
+            background-color: #e5e7eb;
+        }
+        .filter-tab.active {
+            background-color: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+        .event-badge {
+            padding: 0.25rem 0.625rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 9999px;
+        }
+        .event-badge-fall {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+        .event-badge-clap {
+            background-color: #cffafe; /* cyan-100 */
+            color: #0e7490; /* cyan-700 */
+        }
+         .event-badge-other {
+            background-color: #f3f4f6; /* gray-100 */
+            color: #4b5563; /* gray-600 */
+            border: 1px solid #d1d5db; /* gray-300 */
+        }
+
+
+        .pagination-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 0.75rem;
+            margin: 0 0.125rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #374151;
+            background-color: white;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+        }
+        .pagination-button:hover {
+            background-color: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .pagination-button.active {
+            background-color: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+        .pagination-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .input-with-icon {
+            position: relative;
+        }
+        .input-with-icon .icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9ca3af;
+        }
+        .input-with-icon input, .input-with-icon select {
+            padding-left: 2.5rem;
+        }
+        .custom-select-arrow {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            padding-right: 2.5rem;
+        }
+
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar bg-indigo-900 text-white w-64 flex-shrink-0 overflow-y-auto">
+            <div class="p-4 flex items-center justify-between border-b border-indigo-800 sticky top-0 bg-indigo-900 z-10">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-shield-alt text-2xl text-indigo-300"></i>
+                    <span class="text-xl font-bold">SafeGuard</span>
+                </div>
+                <button id="closeSidebar" class="md:hidden text-gray-300 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <nav class="p-4">
+                <div class="mb-8">
+                    <h3 class="text-xs uppercase tracking-wider text-indigo-400 mb-4">Monitoring</h3>
+                    <ul class="space-y-2">
+                        <li>
+                            <a href="{{ url_for('index') }}" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-video w-5"></i><span>Live Surveillance</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('event_history_page') }}" class="sidebar-link sidebar-link-active flex items-center space-x-3 p-2 rounded-lg bg-indigo-800 text-white">
+                                <i class="fas fa-history w-5"></i><span>Event History</span>
+                            </a>
+                        </li>
+                         <li>
+                            <a href="{{ url_for('index') }}#signLanguageView" onclick="navigateToView('signLanguageView')" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-sign-language w-5"></i><span>Sign Language Translation</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('index') }}#videoAnalysisView" onclick="navigateToView('videoAnalysisView')" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-upload w-5"></i><span>Video Analysis</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{{ url_for('index') }}#clapTrackerView" onclick="navigateToView('clapTrackerView')" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-praying-hands w-5"></i><span>Buddha Clap Tracker</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="mb-8">
+                     <h3 class="text-xs uppercase tracking-wider text-indigo-400 mb-4">Settings</h3>
+                     <ul class="space-y-2">
+                         <li>
+                            <a href="{{ url_for('index') }}#systemSettingsView" onclick="navigateToView('systemSettingsView')" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-cog w-5"></i><span>System Settings</span>
+                            </a>
+                         </li>
+                         <li>
+                            <a href="{{ url_for('index') }}#alertPreferencesView" onclick="navigateToView('alertPreferencesView')" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-bell w-5"></i><span>Alert Preferences</span>
+                            </a>
+                        </li>
+                         <li><a href="#" class="flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white"><i class="fas fa-user-shield w-5"></i><span>User Management</span></a></li>
+                     </ul>
+                </div>
+                 <div class="mt-8 pt-4 border-t border-indigo-800">
+                    <div class="flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white cursor-pointer"> <i class="fas fa-sign-out-alt w-5"></i> <span>Logout</span></div>
+                 </div>
+            </nav>
+        </div>
+        <div id="sidebar-overlay" class="sidebar-overlay md:hidden"></div>
+
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="bg-white shadow-sm sticky top-0 z-20">
+                 <div class="flex items-center justify-between px-6 py-3">
+                     <div class="flex items-center">
+                        <button id="toggleSidebar" class="mr-3 text-gray-600 hover:text-gray-900 md:hidden"> <i class="fas fa-bars text-xl"></i> </button>
+                        <a href="{{ url_for('index') }}" class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center">
+                            <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+                        </a>
+                     </div>
+                     <h1 class="text-xl font-semibold text-gray-800 hidden md:block">Event History</h1>
+                     <div class="flex items-center">
+                        <button class="bg-white hover:bg-gray-100 text-gray-700 font-medium py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm flex items-center">
+                            <i class="fas fa-download mr-2"></i>Export
+                        </button>
+                     </div>
+                 </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-6">
+                <div class="bg-white p-4 sm:p-6 rounded-lg shadow-md mb-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div class="input-with-icon">
+                            <i class="fas fa-search icon"></i>
+                            <input type="text" id="searchInput" placeholder="Search events..." class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm p-2.5">
+                        </div>
+                        <div class="input-with-icon">
+                             <i class="fas fa-list-alt icon"></i>
+                            <select id="eventTypeDropdown" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm p-2.5 custom-select-arrow">
+                                <option value="all">All Event Types</option>
+                                <option value="fall">Falls</option>
+                                <option value="clap_session">Clap Sessions</option>
+                                <option value="other">Other</option> 
+                            </select>
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fas fa-laptop-code icon"></i>
+                            <select id="sourceDropdown" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm p-2.5 custom-select-arrow">
+                                <option value="all">All Sources</option>
+                                <option value="live_webcam">Live Webcam</option>
+                                <option value="file_analysis">File Analysis</option>
+                                <option value="clap_tracker">Buddha Clap Tracker</option>
+                            </select>
+                        </div>
+                        <div class="input-with-icon">
+                            <i class="fas fa-calendar-alt icon"></i>
+                            <input type="text" id="dateInput" placeholder="Select date (YYYY-MM-DD)" onfocus="(this.type='date')" onblur="if(!this.value){this.type='text'}" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm p-2.5">
+                        </div>
+                    </div>
+                    <div id="filterTabsContainer" class="flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+                        <button class="filter-tab active" data-filter="all">All Events</button>
+                        <button class="filter-tab" data-filter="fall">Falls</button>
+                        <button class="filter-tab" data-filter="clap_session">Clap Sessions</button>
+                        <button class="filter-tab" data-filter="other">Other</button>
+                    </div>
+                </div>
+
+                <div id="eventGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% if events %}
+                        {% for event in events %}
+                            {% set source_key = '' %}
+                            {% if event.source == "Live Webcam" %}
+                                {% set source_key = 'live_webcam' %}
+                            {% elif event.source and event.source.lower().startswith("file") %} {# More robust check for file source #}
+                                {% set source_key = 'file_analysis' %}
+                            {% elif event.source == "Buddha Clap Tracker" %}
+                                {% set source_key = 'clap_tracker' %}
+                            {% endif %}
+
+                            {% set event_type_for_data = event.type %}
+                            {% if event.type != 'fall' and event.type != 'clap_session' %}
+                                {% set event_type_for_data = 'other' %}
+                            {% endif %}
+
+                            <div class="event-card bg-white rounded-lg shadow-sm overflow-hidden 
+                                        {% if event.type == 'fall' %}event-card-fall{% endif %}
+                                        {% if event.type == 'clap_session' %}event-card-clap{% endif %}
+                                        {% if event_type_for_data == 'other' %}event-card-other{% endif %}"
+                                 data-event-type="{{ event_type_for_data }}"
+                                 data-event-source-key="{{ source_key }}"
+                                 data-event-date="{{ event.timestamp.strftime('%Y-%m-%d') if event.timestamp else '' }}"
+                                 data-search-content="{{ (event.type + ' ' + event.source + ' ' + (event.person_id | string if event.person_id else '') + ' ' + (event.timestamp_formatted if event.timestamp_formatted else '') + ' ' + (event.clap_count | string if event.clap_count else '') + ' ' + (event.target_claps | string if event.target_claps else '') ) | lower }}">
+                                
+                                <div class="p-5">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div class="flex items-center">
+                                            {% if event.type == 'fall' %}
+                                                <div class="bg-red-100 p-2 rounded-full mr-3">
+                                                    <i class="fas fa-user-injured text-xl text-red-500"></i>
+                                                </div>
+                                                <div>
+                                                    <h3 class="text-md font-semibold text-gray-800">Fall Detected</h3>
+                                                    <p class="text-xs text-gray-500">{{ event.source }}</p>
+                                                </div>
+                                            {% elif event.type == 'clap_session' %}
+                                                <div class="bg-cyan-100 p-2 rounded-full mr-3">
+                                                     <i class="fas fa-hands-praying text-xl text-cyan-600"></i>
+                                                </div>
+                                                <div>
+                                                    <h3 class="text-md font-semibold text-gray-800">Clap Session Completed</h3>
+                                                    <p class="text-xs text-gray-500">{{ event.source }}</p>
+                                                </div>
+                                            {% else %} {# For 'other' event types #}
+                                                <div class="bg-gray-100 p-2 rounded-full mr-3">
+                                                     <i class="fas fa-info-circle text-xl text-gray-500"></i>
+                                                </div>
+                                                <div>
+                                                    <h3 class="text-md font-semibold text-gray-800">{{ event.type | title }}</h3> {# Generic Title #}
+                                                    <p class="text-xs text-gray-500">{{ event.source }}</p>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                        {% if event.type == 'fall' %}
+                                            <span class="event-badge event-badge-fall">Fall</span>
+                                        {% elif event.type == 'clap_session' %}
+                                            <span class="event-badge event-badge-clap">Clap</span>
+                                        {% else %}
+                                            <span class="event-badge event-badge-other">{{ event.type | title }}</span>
+                                        {% endif %}
+                                    </div>
+
+                                    <p class="text-sm text-gray-600 mb-2 flex items-center">
+                                        <i class="far fa-clock mr-2 text-gray-400"></i>
+                                        {{ event.timestamp_formatted }}
+                                    </p>
+
+                                    {% if event.type == 'fall' %}
+                                        {% if event.person_id and event.person_id != -1 and event.person_id != '-1' %}
+                                            <p class="text-sm text-gray-600 mb-3 flex items-center">
+                                                <i class="far fa-id-badge mr-2 text-gray-400"></i>
+                                                ID: {{ event.person_id }}
+                                            </p>
+                                        {% endif %}
+                                        {% if event.snippet_url %}
+                                            <button onclick="showVideoPopup('{{ event.snippet_url }}')"
+                                                    class="w-full mt-2 inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-center text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 focus:ring-4 focus:outline-none focus:ring-indigo-200 border border-indigo-200 hover:border-indigo-300">
+                                                <i class="fas fa-video mr-2"></i> View Snippet
+                                            </button>
+                                        {% else %}
+                                            <p class="text-sm text-gray-400 mt-3 italic text-center">No video snippet available.</p>
+                                        {% endif %}
+
+                                    {% elif event.type == 'clap_session' %}
+                                        <div class="space-y-1.5 text-sm text-gray-600">
+                                            <p class="flex items-center">
+                                                <i class="fas fa-sign-language mr-2 text-gray-400 w-4 text-center"></i>
+                                                {{ event.clap_count }} / {{ event.target_claps }} claps
+                                            </p>
+                                            <p class="flex items-center">
+                                                <i class="fas fa-stopwatch mr-2 text-gray-400 w-4 text-center"></i>
+                                                {{ (event.duration_seconds / 60)|round(1) }} minutes
+                                            </p>
+                                            {% if event.calories_burned is not none %}
+                                            <p class="flex items-center">
+                                                <i class="fas fa-fire-alt mr-2 text-gray-400 w-4 text-center"></i>
+                                                {{ event.calories_burned|round(1) }} kcal
+                                            </p>
+                                            {% endif %}
+                                        </div>
+                                    {% else %} {# Content for 'other' event types #}
+                                        <p class="text-sm text-gray-500">Additional event details might go here.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                </div> {# End Event Grid #}
+                
+                {% if not events %}
+                    <div id="noEventsMessage" class="text-center py-10 bg-white rounded-lg shadow-md">
+                        <i class="fas fa-history text-5xl text-gray-300 mb-4"></i>
+                        <p class="text-xl text-gray-600">No events recorded yet.</p>
+                        <p class="text-gray-500 mt-1">Check back later after some activity or fall detections.</p>
+                    </div>
+                {% else %}
+                     <div id="noFilteredEventsMessage" class="hidden text-center py-10 bg-white rounded-lg shadow-md">
+                        <i class="fas fa-filter text-5xl text-gray-300 mb-4"></i>
+                        <p class="text-xl text-gray-600">No events match your current filters.</p>
+                        <p class="text-gray-500 mt-1">Try adjusting your filter criteria.</p>
+                    </div>
+                {% endif %}
+
+
+                {% if events and events|length > 0 %}
+                <div class="mt-8 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-600">
+                    <p id="paginationInfo">
+                        Showing <span class="font-medium">1</span> to <span class="font-medium">{{ [9, events|length]|min }}</span> of <span class="font-medium">{{ events|length }}</span> results
+                    </p>
+                    <div class="flex">
+                        <button class="pagination-button disabled"><i class="fas fa-chevron-left"></i></button>
+                        <button class="pagination-button active">1</button>
+                        {# <button class="pagination-button">2</button> #}
+                        {# <button class="pagination-button">3</button> #}
+                        <button class="pagination-button disabled"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                {% endif %}
+
+            </main>
+        </div>
+    </div>
+
+    <div id="videoPopup" class="video-popup" onclick="closeVideoPopup(event)">
+        <div class="video-popup-content" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-3">
+                <h4 class="text-lg font-semibold text-gray-800">Event Video Snippet</h4>
+                <button class="close-popup text-gray-400 hover:text-gray-600 text-2xl" onclick="closeVideoPopup(event, true)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <video id="popupVideoPlayer" controls autoplay width="640" height="auto" class="bg-black rounded"></video>
+        </div>
+    </div>
+
+    <script>
+        const videoPopup = document.getElementById('videoPopup');
+        const popupVideoPlayer = document.getElementById('popupVideoPlayer');
+        const sidebar = document.getElementById('sidebar');
+        const toggleSidebarBtn = document.getElementById('toggleSidebar');
+        const closeSidebarBtn = document.getElementById('closeSidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+        // Filter elements
+        const searchInput = document.getElementById('searchInput');
+        const eventTypeDropdown = document.getElementById('eventTypeDropdown');
+        const sourceDropdown = document.getElementById('sourceDropdown');
+        const dateInput = document.getElementById('dateInput');
+        const filterTabsContainer = document.getElementById('filterTabsContainer');
+        const eventGrid = document.getElementById('eventGrid');
+        const allEventCards = eventGrid ? Array.from(eventGrid.getElementsByClassName('event-card')) : [];
+        const noEventsMessage = document.getElementById('noEventsMessage'); // Original no events message
+        const noFilteredEventsMessage = document.getElementById('noFilteredEventsMessage'); // Message for no results after filtering
+        const paginationInfo = document.getElementById('paginationInfo');
+
+
+        function showVideoPopup(videoUrl) {
+            if (popupVideoPlayer && videoUrl) {
+                popupVideoPlayer.src = videoUrl;
+                videoPopup.style.display = 'flex';
+                document.body.style.overflow = 'hidden';
+                popupVideoPlayer.load();
+                popupVideoPlayer.play().catch(e => console.warn("Autoplay prevented for popup:", e));
+            }
+        }
+
+        function closeVideoPopup(event, forceClose = false) {
+            if (forceClose || (event && event.target === videoPopup)) {
+                if (popupVideoPlayer) {
+                    popupVideoPlayer.pause();
+                    popupVideoPlayer.src = ""; 
+                }
+                videoPopup.style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        }
+
+        if (toggleSidebarBtn) {
+            toggleSidebarBtn.addEventListener('click', () => {
+                sidebar.classList.toggle('open');
+                if (sidebarOverlay) sidebarOverlay.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+            });
+        }
+        if (closeSidebarBtn) {
+            closeSidebarBtn.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                if (sidebarOverlay) sidebarOverlay.style.display = 'none';
+            });
+        }
+        if (sidebarOverlay) {
+            sidebarOverlay.addEventListener('click', () => {
+                sidebar.classList.remove('open');
+                sidebarOverlay.style.display = 'none';
+            });
+        }
+        
+        function navigateToView(viewId) {
+            localStorage.setItem('targetView', viewId);
+            window.location.href = "{{ url_for('index') }}";
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === "Escape" && videoPopup.style.display === 'flex') {
+                closeVideoPopup(null, true);
+            }
+        });
+
+        // --- Filtering Logic ---
+        function applyFilters() {
+            if (!eventGrid) return;
+
+            const searchTerm = searchInput.value.toLowerCase();
+            const selectedEventType = eventTypeDropdown.value;
+            const selectedSourceKey = sourceDropdown.value;
+            const selectedDate = dateInput.value; // YYYY-MM-DD
+            const activeFilterTab = filterTabsContainer.querySelector('.filter-tab.active').dataset.filter;
+
+            let visibleCardCount = 0;
+
+            allEventCards.forEach(card => {
+                const cardSearchContent = card.dataset.searchContent || "";
+                const cardEventType = card.dataset.eventType;
+                const cardSourceKey = card.dataset.eventSourceKey;
+                const cardDate = card.dataset.eventDate;
+
+                let isVisible = true;
+
+                // Search term filter
+                if (searchTerm && !cardSearchContent.includes(searchTerm)) {
+                    isVisible = false;
+                }
+
+                // Event type dropdown filter
+                if (isVisible && selectedEventType !== 'all' && cardEventType !== selectedEventType) {
+                    isVisible = false;
+                }
+                
+                // Source dropdown filter
+                if (isVisible && selectedSourceKey !== 'all' && cardSourceKey !== selectedSourceKey) {
+                    isVisible = false;
+                }
+
+                // Date input filter
+                if (isVisible && selectedDate && cardDate !== selectedDate) {
+                    isVisible = false;
+                }
+
+                // Active tab filter
+                if (isVisible && activeFilterTab !== 'all') {
+                    if (activeFilterTab === 'other') {
+                        if (cardEventType === 'fall' || cardEventType === 'clap_session') {
+                            isVisible = false;
+                        }
+                    } else if (cardEventType !== activeFilterTab) {
+                        isVisible = false;
+                    }
+                }
+
+                if (isVisible) {
+                    card.classList.remove('hidden');
+                    visibleCardCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            // Show/hide "no filtered results" message
+            if (noFilteredEventsMessage) {
+                if (visibleCardCount === 0 && allEventCards.length > 0) { // Only show if there were cards to begin with
+                    noFilteredEventsMessage.classList.remove('hidden');
+                } else {
+                    noFilteredEventsMessage.classList.add('hidden');
+                }
+            }
+            // Hide original "no events" message if filters are active and hiding all
+             if (noEventsMessage && (searchTerm || selectedEventType !== 'all' || selectedSourceKey !== 'all' || selectedDate || activeFilterTab !== 'all')) {
+                noEventsMessage.classList.add('hidden');
+            } else if (noEventsMessage && allEventCards.length === 0) { // Show if truly no events
+                noEventsMessage.classList.remove('hidden');
+            }
+
+
+            // Update pagination info (basic example, full pagination is more complex)
+            if (paginationInfo) {
+                const totalEvents = allEventCards.length; // This should be total from backend for real pagination
+                 if (visibleCardCount > 0) {
+                    paginationInfo.innerHTML = `Showing <span class="font-medium">1</span> to <span class="font-medium">${visibleCardCount}</span> of <span class="font-medium">${visibleCardCount}</span> results (filtered)`;
+                 } else if (allEventCards.length > 0 && visibleCardCount === 0) {
+                    paginationInfo.innerHTML = `Showing <span class="font-medium">0</span> results (filtered)`;
+                 } else if (allEventCards.length === 0) {
+                     paginationInfo.innerHTML = `Showing <span class="font-medium">0</span> results`;
+                 }
+            }
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applyFilters);
+        if (eventTypeDropdown) eventTypeDropdown.addEventListener('change', applyFilters);
+        if (sourceDropdown) sourceDropdown.addEventListener('change', applyFilters);
+        if (dateInput) dateInput.addEventListener('change', applyFilters);
+
+        if (filterTabsContainer) {
+            const filterTabs = filterTabsContainer.querySelectorAll('.filter-tab');
+            filterTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    filterTabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    applyFilters();
+                });
+            });
+        }
+        
+        // Initial filter application on page load if needed (e.g., if filters could be pre-set)
+        // document.addEventListener('DOMContentLoaded', applyFilters); // Or call if you expect pre-filled filters
+    </script>
+</body>
+</html>

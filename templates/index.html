@@ -1,0 +1,2518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeGuard - AI Fall Detection System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Styles for webcam feed container */
+        .video-stream-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            height: 0;
+            overflow: hidden;
+            background: #000; /* Black background for placeholder */
+            border-radius: 0.5rem; /* Rounded corners */
+            border: 1px solid #4a5568; /* Darker border for visibility */
+        }
+        .video-stream-container img,
+        .video-stream-container .placeholder-text {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+         .video-stream-container .placeholder-text {
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             color: #aaa; /* Light gray text */
+             font-size: 1rem;
+         }
+        /* Styles for results video container */
+        .results-video-container {
+             max-width: 100%; /* Ensure it doesn't overflow */
+             margin-top: 1rem;
+        }
+         .results-video-container video {
+            width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            border: 1px solid #e5e7eb; /* light gray border */
+         }
+
+        /* Sidebar styles */
+        .sidebar {
+            transition: all 0.3s ease;
+        }
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                position: fixed; /* Use fixed for overlay */
+                z-index: 40; /* Ensure it's above content */
+                height: 100vh;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            /* Overlay for when sidebar is open on mobile */
+             .sidebar-overlay {
+                 position: fixed;
+                 inset: 0;
+                 background-color: rgba(0,0,0,0.5);
+                 z-index: 30;
+                 display: none; /* Hidden by default */
+             }
+             .sidebar.open + .sidebar-overlay {
+                 display: block;
+             }
+        }
+        /* Flash message styles */
+        .flash-messages { list-style: none; padding: 0; margin-bottom: 1rem; }
+        .flash-messages li { padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-radius: 0.375rem; border-width: 1px; font-size: 0.875rem; }
+        .flash-info { background-color: #e0f2fe; color: #0c5460; border-color: #bae6fd; }
+        .flash-success { background-color: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+        .flash-warning { background-color: #fef3c7; color: #92400e; border-color: #fde68a; }
+        .flash-danger { background-color: #fee2e2; color: #991b1b; border-color: #fecaca; }
+
+        /* Ensure modal video container has appropriate styling */
+        #alertModal .video-container {
+            position: relative;
+            padding-bottom: 56.25%; /* 16:9 */
+            height: 0;
+            overflow: hidden;
+            background: #000;
+            border-radius: 0.25rem; /* slightly less rounded */
+        }
+        #alertModal .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Use contain to see whole video */
+        }
+        /* Added hidden utility class if not already present from Tailwind */
+        .hidden { display: none; }
+
+        /* Style for active sidebar link */
+        .sidebar-link-active {
+            background-color: #4338ca; /* Slightly darker indigo */
+            color: white;
+            font-weight: 600;
+        }
+
+        /* Progress Circle CSS */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+            stroke: #4f46e5; /* Indigo */
+        }
+        .progress-ring__background {
+             stroke: #e5e7eb; /* Gray 200 */
+        }
+
+        /* Styles for threshold sliders */
+        .threshold-slider-container {
+            margin-top: 1.5rem; /* Add some space above */
+            padding-top: 1.5rem;
+            border-top: 1px solid #e5e7eb; /* Light gray separator */
+        }
+        .threshold-slider-container label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 500; /* font-medium */
+            color: #374151; /* gray-700 */
+        }
+        .threshold-slider-container .slider-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem; /* space-x-3 */
+        }
+        .threshold-slider-container input[type="range"] {
+            flex-grow: 1;
+            cursor: pointer;
+            height: 0.5rem; /* h-2 */
+            appearance: none;
+            background-color: #e5e7eb; /* bg-gray-200 */
+            border-radius: 9999px; /* rounded-full */
+        }
+        /* Style the thumb (handle) */
+        .threshold-slider-container input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 1rem; /* w-4 */
+            height: 1rem; /* h-4 */
+            background-color: #4f46e5; /* bg-indigo-600 */
+            border-radius: 9999px;
+            cursor: pointer;
+        }
+        .threshold-slider-container input[type="range"]::-moz-range-thumb {
+            width: 1rem;
+            height: 1rem;
+            background-color: #4f46e5;
+            border-radius: 9999px;
+            cursor: pointer;
+            border: none;
+        }
+        .threshold-slider-container .value-display {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #4f46e5; /* text-indigo-600 */
+            min-width: 3rem; /* Ensure space for value */
+            text-align: right;
+        }
+
+    /* === Styles from sign_lang_trans.html START === */
+    /* Basic styling for range input */
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      background: #d3d3d3;
+      outline: none;
+      opacity: 0.7;
+      -webkit-transition: .2s;
+      transition: opacity .2s;
+      border-radius: 4px;
+    }
+
+    input[type=range]:hover {
+      opacity: 1;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #4f46e5; /* Indigo */
+      cursor: pointer;
+      border-radius: 50%;
+    }
+
+    input[type=range]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: #4f46e5; /* Indigo */
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+    }
+
+    /* Basic styling for toggle switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px; /* Reduced width */
+      height: 24px; /* Reduced height */
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 24px; /* Adjusted border-radius */
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px; /* Reduced height */
+      width: 18px;  /* Reduced width */
+      left: 3px;    /* Adjusted position */
+      bottom: 3px;  /* Adjusted position */
+      background-color: white;
+      -webkit-transition: .4s;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #4f46e5; /* Indigo */
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #4f46e5; /* Indigo */
+    }
+
+    input:checked + .slider:before {
+      -webkit-transform: translateX(26px); /* Adjusted translation */
+      -ms-transform: translateX(26px);
+      transform: translateX(26px);
+    }
+
+    /* High Contrast Mode specific to signLanguageView when body has .high-contrast */
+    /* === Styles for Sign Language View High Contrast Mode START === */
+
+/* This is the main div that holds all the ASL content sections */
+body.high-contrast #signLanguageView > div.bg-white {
+    background-color: #000000 !important; /* Pure black background for the main ASL content area */
+    padding: 0.5rem !important; /* Reduce padding to make sections appear closer to edge */
+    border: none !important; /* Remove any border it might inherit or have */
+    box-shadow: none !important; /* Remove any shadow */
+}
+
+/* Individual sections (Camera View, Translation, Common Phrases, Accessibility) */
+body.high-contrast #signLanguageView section {
+    background-color: #0D0D2B !important; /* Very dark blue/purple from image */
+    border: 1px solid #E0E0E0 !important; /* Slightly off-white border for definition */
+    color: #FFFFFF !important;
+    margin-bottom: 0.5rem !important; /* Add some space between stacked sections */
+}
+body.high-contrast #signLanguageView section:last-child {
+    margin-bottom: 0 !important;
+}
+
+
+/* Headers within those sections (e.g., "Camera View", "Translation" titles) */
+body.high-contrast #signLanguageView section header {
+    background-color: #05051C !important; /* Even darker, almost black-blue */
+    color: #FFFFFF !important;
+    border-bottom: 1px solid #E0E0E0 !important;
+}
+/* Ensure all text and icons within section headers are white */
+body.high-contrast #signLanguageView section header *,
+body.high-contrast #signLanguageView section header [class*="fa-"] {
+    color: #FFFFFF !important;
+}
+
+/* Translation output box */
+body.high-contrast #signLanguageView #translation-output {
+    background-color: #0D0D2B !important; /* Match section background */
+    border: 1px solid #E0E0E0 !important;
+    color: #FFFFFF !important;
+}
+
+/* General button styling in high contrast for this view */
+body.high-contrast #signLanguageView button {
+    border: 1px solid #E0E0E0 !important;
+    color: #FFFFFF !important;
+    box-shadow: none !important;
+}
+
+/* Specific Buttons: Start Camera, Stop, Speak, Clear */
+body.high-contrast #signLanguageView #asl-start-camera-btn,
+body.high-contrast #signLanguageView #asl-speak-btn {
+    background-color: #3A3AFF !important; /* Bright blue from image */
+}
+body.high-contrast #signLanguageView #asl-stop-camera-btn {
+    background-color: #C03030 !important; /* A visible red */
+}
+body.high-contrast #signLanguageView #asl-clear-btn {
+    background-color: #5A5A5A !important; /* Medium-dark gray from image */
+}
+
+/* Common Phrase buttons */
+body.high-contrast #signLanguageView .asl-common-phrase-btn {
+    background-color: #22223E !important; /* Darker than section, but distinct */
+}
+body.high-contrast #signLanguageView .asl-common-phrase-btn:hover {
+    background-color: #303050 !important;
+}
+
+
+/* All other specific text elements that might have Tailwind colors */
+body.high-contrast #signLanguageView h2, /* Main "Sign Language Translation" title within the view */
+body.high-contrast #signLanguageView label,
+body.high-contrast #signLanguageView span#font-size-value,
+body.high-contrast #signLanguageView .text-gray-700, /* Default label color for font size */
+body.high-contrast #signLanguageView .text-gray-500, /* Placeholder text color etc. */
+body.high-contrast #signLanguageView .text-sm.font-medium.text-gray-700 { /* e.g., "High Contrast Mode" label */
+    color: #FFFFFF !important;
+}
+
+/* Main title of the ASL feature if it's inside signLanguageView div */
+body.high-contrast #signLanguageView h2.text-xl.font-semibold.text-gray-800 {
+    color: #FFFFFF !important;
+}
+/* Icons for the main title (e.g. fas fa-sign-language) */
+body.high-contrast #signLanguageView h2.text-xl.font-semibold.text-gray-800 .text-indigo-600 {
+    color: #FFFFFF !important;
+}
+
+
+/* Font Size Slider */
+body.high-contrast #signLanguageView input[type=range]#font-size-slider {
+    background: #333333 !important; /* Dark gray track */
+}
+body.high-contrast #signLanguageView input[type=range]#font-size-slider::-webkit-slider-thumb {
+    background: #E0E0E0 !important; /* Light gray/white thumb */
+}
+body.high-contrast #signLanguageView input[type=range]#font-size-slider::-moz-range-thumb {
+    background: #E0E0E0 !important; /* Light gray/white thumb */
+}
+
+/* High Contrast Toggle Switch */
+body.high-contrast #signLanguageView .switch .slider { /* Toggle 'off' state track */
+    background-color: #333333 !important;
+    border: 1px solid #777777 !important;
+}
+body.high-contrast #signLanguageView .switch .slider:before { /* Toggle circle */
+    background-color: #E0E0E0 !important; /* Light gray/white circle */
+}
+body.high-contrast #signLanguageView input:checked + .slider { /* Toggle 'on' state track */
+    background-color: #3A3AFF !important; /* Bright blue, matching buttons */
+}
+body.high-contrast #signLanguageView input:checked + .slider:before { /* Toggle circle when 'on' */
+    background-color: #FFFFFF !important; /* White circle */
+}
+
+/* Camera Placeholder styling */
+body.high-contrast #signLanguageView #asl-camera-placeholder {
+    background-color: #0D0D2B !important; /* Match section background */
+    color: #A0A0A0 !important; /* Lighter gray text for "Click start..." */
+    /* border: 1px dashed #444444 !important; Remove or make solid like sections */
+}
+/* Icon and error text inside camera placeholder */
+body.high-contrast #signLanguageView #asl-camera-placeholder .fas, /* General FontAwesome icon */
+body.high-contrast #signLanguageView #asl-camera-placeholder i { /* More general icon catch */
+    color: #FF6B6B !important; /* Red for error icon from image */
+}
+body.high-contrast #signLanguageView #asl-camera-placeholder p {
+    color: #FF6B6B !important; /* Red for "Error communicating..." text */
+}
+/* If the error message itself has text-red-500, override it specifically */
+body.high-contrast #signLanguageView #asl-camera-placeholder .text-red-500 {
+    color: #FF8080 !important; /* Bright, visible red for error messages */
+}
+
+
+/* Fallback for any other borders if needed */
+body.high-contrast #signLanguageView .border,
+body.high-contrast #signLanguageView .border-gray-200,
+body.high-contrast #signLanguageView .border-gray-300 {
+   border-color: #E0E0E0 !important;
+}
+
+/* === Styles for Sign Language View High Contrast Mode END === */
+    /* === Styles from sign_lang_trans.html END === */
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar bg-indigo-900 text-white w-64 flex-shrink-0 overflow-y-auto">
+            <div class="p-4 flex items-center justify-between border-b border-indigo-800 sticky top-0 bg-indigo-900 z-10">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-shield-alt text-2xl text-indigo-300"></i>
+                    <span class="text-xl font-bold">SafeGuard</span>
+                </div>
+                <button id="closeSidebar" class="md:hidden text-gray-300 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <nav class="p-4">
+                 <!-- Navigation sections -->
+                <div class="mb-8">
+                    <h3 class="text-xs uppercase tracking-wider text-indigo-400 mb-4">Monitoring</h3>
+                    <ul class="space-y-2">
+                        <li>
+                            <!-- Add ID and remove active class initially -->
+                            <a href="#" id="navLiveSurveillance" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-video w-5"></i><span>Live Surveillance</span>
+                            </a>
+                        </li>
+                        <li>
+                            <!-- *** MODIFIED LINK *** -->
+                            <a href="{{ url_for('event_history_page') }}" target="_blank" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-history w-5"></i><span>Event History</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" id="navSignLanguage" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-sign-language w-5"></i><span>Sign Language Translation</span>
+                            </a>
+                        </li>
+                        <li>
+                            <!-- Add ID -->
+                            <a href="#" id="navVideoAnalysis" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-upload w-5"></i><span>Video Analysis</span>
+                            </a>
+                        </li>
+                        <li>
+                             <!-- NEW: Buddha Clap Tracker Link -->
+                            <a href="#" id="navClapTracker" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-praying-hands w-5"></i><span>Buddha Clap Tracker</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="mb-8">
+                     <h3 class="text-xs uppercase tracking-wider text-indigo-400 mb-4">Settings</h3>
+                     <ul class="space-y-2">
+                         <li>
+                            <!-- PREVIOUSLY: <a href="#" class="flex items-center ...> -->
+                            <a href="#" id="navSystemSettings" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-cog w-5"></i><span>System Settings</span>
+                            </a>
+                         </li>
+                         <li>
+                            <!-- Add ID for Alert Preferences -->
+                            <a href="#" id="navAlertPreferences" class="sidebar-link flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                                <i class="fas fa-bell w-5"></i><span>Alert Preferences</span>
+                            </a>
+                        </li>
+                         <li><a href="#" class="flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white"><i class="fas fa-user-shield w-5"></i><span>User Management</span></a></li>
+                     </ul>
+                </div>
+                 <div class="mt-8 pt-4 border-t border-indigo-800">
+                    <!-- NEW Logout link (functional <a> tag) -->
+                    <a href="{{ url_for('logout_fr') }}" class="flex items-center space-x-3 p-2 rounded-lg text-indigo-200 hover:bg-indigo-800 hover:text-white">
+                        <i class="fas fa-sign-out-alt w-5"></i> <span>Logout</span>
+                    </a>
+                 </div>
+            </nav>
+        </div>
+        <!-- Sidebar overlay for mobile -->
+        <div id="sidebar-overlay" class="sidebar-overlay md:hidden"></div>
+
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <!-- Top Navigation -->
+            <header class="bg-white shadow-sm sticky top-0 z-20">
+                 <div class="flex items-center justify-between px-6 py-3">
+                     <div class="flex items-center">
+                        <button id="toggleSidebar" class="mr-4 text-gray-600 hover:text-gray-900 md:hidden"> <i class="fas fa-bars text-xl"></i> </button>
+                        <h1 class="text-xl font-semibold text-gray-800">Fall Detection Dashboard</h1>
+                     </div>
+                     <div class="flex items-center space-x-4">
+                         <div class="relative"> <button class="text-gray-600 hover:text-gray-900"> <i class="fas fa-bell text-xl"></i> <span class="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span> </button> </div>
+                         <div class="flex items-center space-x-2"> <div class="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold"> AD </div> <span class="hidden md:inline text-sm font-medium">Admin</span> </div>
+                     </div>
+                 </div>
+            </header>
+
+            <!-- Main Content Area -->
+            <main class="flex-1 overflow-y-auto p-6">
+
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    <ul class="flash-messages">
+                    {% for category, message in messages %}
+                      <li class="flash-{{ category }}">{{ message }}</li>
+                    {% endfor %}
+                    </ul>
+                  {% endif %}
+                {% endwith %}
+
+                <!-- ===== View Container: Live Surveillance ===== -->
+                <!-- Add ID and 'view-section' class -->
+                <div id="liveSurveillanceView" class="view-section">
+                    <!-- Live Surveillance & Controls Section -->
+                    <div class="bg-white rounded-lg shadow mb-6">
+                        <div class="p-4 border-b border-gray-200">
+                            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+                                <i class="fas fa-video mr-2 text-indigo-600"></i>
+                                Live Surveillance (Fall Detection)
+                            </h2>
+                        </div>
+                        <div class="p-4">
+                            <!-- Webcam Controls -->
+                            <div class="mb-4 text-center md:text-left">
+                                <form action="{{ url_for('start_webcam') }}" method="get" style="display: inline;">
+                                    <button type="submit" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-md text-sm mr-2 mb-2 md:mb-0 transition duration-150 ease-in-out">
+                                        <i class="fas fa-play mr-1"></i> Start Webcam
+                                    </button>
+                                </form>
+                                <form action="{{ url_for('stop_webcam') }}" method="get" style="display: inline;">
+                                    <button type="submit" class="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md text-sm mb-2 md:mb-0 transition duration-150 ease-in-out">
+                                         <i class="fas fa-stop mr-1"></i> Stop Webcam
+                                     </button>
+                                </form>
+                            </div>
+
+                             <!-- Webcam Display Area (Fall Detection) -->
+                            <div class="video-stream-container">
+                                <!-- Updated logic to use placeholder based on webcam_active -->
+                                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live Fall Detection Feed" class="{{ 'hidden' if not webcam_active else '' }}">
+                                <div class="placeholder-text {{ '' if not webcam_active else 'hidden' }}" id="fall-cam-placeholder">
+                                    <span></span>
+                                 </div>
+                            </div>
+                            <p class="text-center text-sm text-gray-500 mt-2">
+                                 Fall Cam Status: <span id="fall-cam-status" class="{{ 'text-green-600 font-medium' if webcam_active else 'text-red-600 font-medium' }}">{{ 'Active' if webcam_active else 'Inactive' }}</span>
+                            </p>
+                        </div>
+                    </div>
+                </div> <!-- End Live Surveillance Section -->
+
+                <!-- ===== View Container: Buddha Clap Tracker ===== -->
+                <div id="clapTrackerView" class="view-section hidden">
+                    <div class="bg-white rounded-lg shadow mb-6">
+                        <div class="p-4 border-b border-gray-200">
+                            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+                                <i class="fas fa-praying-hands mr-2 text-indigo-600"></i>
+                                Buddha Clap Tracker
+                            </h2>
+                        </div>
+                        <div class="p-4">
+                            <!-- Clap Tracker Controls -->
+                            <div class="mb-4 text-center md:text-left">
+                                <!-- REMOVED form tag -->
+                                <button type="button" id="start-clap-btn" class="bg-cyan-500 hover:bg-cyan-600 text-white py-2 px-4 rounded-md text-sm mr-2 mb-2 md:mb-0 transition duration-150 ease-in-out">
+                                    <i class="fas fa-play mr-1"></i> Start Clapper
+                                </button>
+                                <!-- REMOVED form tag -->
+                                <button type="button" id="stop-clap-btn" class="bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded-md text-sm mb-2 md:mb-0 transition duration-150 ease-in-out">
+                                     <i class="fas fa-stop mr-1"></i> Stop Clapper
+                                 </button>
+                                <!-- Status Message Area (Optional but good for feedback) -->
+                                <p id="clap-control-status" class="text-sm text-gray-500 mt-2 inline-block ml-4"></p>
+                            </div>
+
+                             <!-- Clap Tracker Display Area -->
+                            <div class="video-stream-container mb-6">
+                                <!-- Image tag for the clap stream - REMOVE Jinja class logic -->
+                                <!-- Let JS handle visibility entirely -->
+                                <img id="clap-tracker-stream" src="" alt="Clap Tracker Feed" class="hidden"> <!-- Start hidden, empty src -->
+
+                                <!-- Placeholder div - REMOVE Jinja class logic -->
+                                <!-- Start VISIBLE by default (or hidden if tracker often starts active) -->
+                                <div class="placeholder-text" id="clap-tracker-placeholder"> <!-- Let JS add/remove 'hidden' -->
+                                    <span></span>
+                                </div>
+                            </div>
+                             <p class="text-center text-sm text-gray-500 mt-2 mb-6">
+                                  <!-- Keep this status span as is, JS updates it -->
+                                  Clap Tracker Status: <span id="clap-tracker-status" class="text-red-600 font-medium">Inactive</span>
+                             </p>
+
+                            <!-- === NEW: Clap Tracker Dashboard UI === -->
+                            <div class="mt-6 pt-6 border-t border-gray-200">
+                                <h3 class="text-lg font-semibold text-gray-700 mb-1">Daily Exercise Monitoring</h3>
+
+                                <!-- Today's Progress Section -->
+                                <div class="bg-indigo-50 rounded-lg p-4 mb-6 flex items-center justify-between flex-wrap gap-4">
+                                    <div>
+                                        <h4 class="font-semibold text-indigo-900">Today's Progress</h4>
+                                        <p class="text-sm text-indigo-700">Target: <span id="clap-target-display">{{ initial_clap_status.target_claps | default(100) }}</span> claps per day</p>
+                                        <div class="mt-3 text-sm bg-white/60 rounded-lg p-3 inline-block">
+                                            <span class="font-bold text-indigo-800" id="clap-count-today">{{ initial_clap_status.clap_count | default(0) }}</span> claps detected today
+                                            <br>
+                                            <span id="claps-remaining" class="text-indigo-600">N/A</span> more to reach daily target
+                                        </div>
+                                    </div>
+                                    <!-- Progress Circle -->
+                                    <div class="relative w-24 h-24">
+                                        <svg class="w-full h-full" viewBox="0 0 36 36">
+                                            <path class="progress-ring__background"
+                                                d="M18 2.0845
+                                                a 15.9155 15.9155 0 0 1 0 31.831
+                                                a 15.9155 15.9155 0 0 1 0 -31.831"
+                                                fill="none" stroke-width="3"/>
+                                            <path class="progress-ring__circle"
+                                                id="clap-progress-circle"
+                                                stroke-width="3" fill="none"
+                                                stroke-dasharray="100, 100" stroke-dashoffset="100"
+                                                d="M18 2.0845
+                                                a 15.9155 15.9155 0 0 1 0 31.831
+                                                a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                        </svg>
+                                        <div class="absolute inset-0 flex items-center justify-center">
+                                            <span id="clap-progress-percentage" class="text-xl font-bold text-indigo-700">0%</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Set Daily Target Section -->
+                                <div class="mb-6 p-4 border rounded-lg bg-gray-50">
+                                    <label for="clap-target-input" class="block text-sm font-medium text-gray-700 mb-1">Set Daily Clap Target</label>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="number" id="clap-target-input" name="clapTarget" min="0" step="1" value="{{ initial_clap_status.target_claps | default(100) }}" class="w-24 border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 text-sm p-2">
+                                        <button id="set-clap-target-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md text-sm transition duration-150 ease-in-out">Set Target</button>
+                                    </div>
+                                    <p id="set-target-status" class="text-xs text-gray-500 mt-1"></p>
+                                </div>
+
+                                <!-- Stats Cards Section -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <!-- Last Session -->
+                                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h5 class="text-sm text-gray-500 mb-1">Last Session</h5>
+                                        <p class="text-xl font-semibold text-gray-800" id="last-session-claps">N/A <span class="text-sm font-normal">claps</span></p>
+                                        <p class="text-xs text-gray-400" id="last-session-time">--</p>
+                                    </div>
+                                    <!-- Best Session -->
+                                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h5 class="text-sm text-gray-500 mb-1">Best Session</h5>
+                                        <p class="text-xl font-semibold text-gray-800" id="best-session-claps">N/A <span class="text-sm font-normal">claps</span></p>
+                                        <p class="text-xs text-gray-400" id="best-session-time">--</p>
+                                    </div>
+                                    <!-- Weekly Avg -->
+                                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h5 class="text-sm text-gray-500 mb-1">Weekly Avg</h5>
+                                        <p class="text-xl font-semibold text-gray-800" id="weekly-avg-claps">N/A<span class="text-sm font-normal">/day</span></p>
+                                        <p class="text-xs text-green-500" id="weekly-avg-change">--</p>
+                                    </div>
+                                    <!-- Streak -->
+                                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h5 class="text-sm text-gray-500 mb-1">Streak</h5>
+                                        <p class="text-xl font-semibold text-gray-800" id="streak-days">N/A <span class="text-sm font-normal">days</span></p>
+                                        <p class="text-xs text-gray-400">Keep it up!</p>
+                                    </div>
+                                </div>
+
+                                <!-- <<< ADD TODAY'S CALORIES CARD >>> -->
+                                <div class="bg-orange-50 rounded-lg p-4 border border-orange-200">
+                                    <h5 class="text-sm text-orange-600 mb-1 flex items-center">
+                                        <i class="fas fa-fire-alt mr-1"></i>Today's Calories
+                                    </h5>
+                                    <p class="text-xl font-semibold text-orange-800" id="today-calories">0.0 <span class="text-sm font-normal">kcal</span></p>
+                                    <p class="text-xs text-orange-500">Burned today (UTC)</p>
+                                </div>
+
+                                <!-- <<< ADD OVERALL CALORIES CARD >>> -->
+                                <div class="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                                    <h5 class="text-sm text-purple-600 mb-1 flex items-center">
+                                        <i class="fas fa-burn mr-1"></i>Total Calories
+                                    </h5>
+                                    <p class="text-xl font-semibold text-purple-800" id="overall-calories">0.0 <span class="text-sm font-normal">kcal</span></p>
+                                    <p class="text-xs text-purple-500">Across all sessions</p>
+                                </div>
+
+                            </div> <!-- End Grid -->
+
+                            <!-- === END: Clap Tracker Dashboard UI === -->
+
+                        </div>
+                    </div>
+                </div> <!-- End Clap Tracker Section -->
+
+                <!-- ===== View Container: Video Analysis ===== -->
+                <!-- Add ID, 'view-section', and 'hidden' class initially -->
+                <div id="videoAnalysisView" class="view-section hidden">
+                    <!-- Video Upload & Analysis Section -->
+                    <div class="bg-white rounded-lg shadow">
+                        <div class="p-4 border-b border-gray-200">
+                            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+                                <i class="fas fa-upload mr-2 text-indigo-600"></i>
+                                Video Analysis
+                            </h2>
+                        </div>
+                        <div class="p-4">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <!-- Upload Form & Status -->
+                                <div>
+                                    <form method="post" enctype="multipart/form-data" action="{{ url_for('upload_video') }}" id="uploadVideoForm">
+                                        <label for="videoUploadInput" class="block text-sm font-medium text-gray-700 mb-1">Upload Video File</label>
+                                        <div class="flex items-center">
+                                             <input type="file" name="video" id="videoUploadInput" accept="video/*" required class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer border border-gray-300 rounded-md p-1">
+                                        </div>
+                                        <button type="submit" class="mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg flex items-center justify-center text-sm transition duration-150 ease-in-out">
+                                            <i class="fas fa-cloud-upload-alt mr-2"></i>
+                                            Upload & Process Video
+                                        </button>
+                                    </form>
+                                    <!-- Status Display -->
+                                    <div class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm" aria-live="polite">
+                                         <p class="text-gray-700">
+                                             Current Status: <span id="status-message" class="font-semibold text-indigo-700">{{ processing_status }}</span>
+                                         </p>
+                                         <p id="current-file-display" class="text-gray-600 truncate">
+                                             {% if current_file %} File: {{ current_file }}{% endif %}
+                                         </p>
+                                         <p id="error-message" class="text-red-600 font-medium mt-1">
+                                              {% if error_message %}{{ error_message }}{% endif %}
+                                         </p>
+                                    </div>
+                                </div>
+
+                                <!-- Analysis Results -->
+                                <div class="border rounded-lg p-4 h-full bg-gray-50">
+                                    <h3 class="font-medium text-gray-800 mb-4 text-center">Analysis Results</h3>
+
+                                    <!-- Placeholder -->
+                                    <div id="results-placeholder" class="text-center py-8 {% if processed_video_url and processing_status == 'Completed' %}hidden{% endif %}"> <!-- Adjust initial hidden state -->
+                                         <i class="fas fa-hourglass-half text-3xl text-gray-300 mb-3"></i>
+                                         <p class="text-gray-500 text-sm">Analysis results will appear here once processing is complete.</p>
+                                    </div>
+
+                                    <!-- Detection Results Display -->
+                                    <div id="detectionResults" class="{% if not processed_video_url or processing_status != 'Completed' %}hidden{% endif %}"> <!-- Adjust initial hidden state -->
+                                        <div class="space-y-3 mb-4">
+                                            <!-- Fall, Event, Duration counts -->
+                                            <div class="flex items-center justify-between text-sm">
+                                                <span class="font-medium text-gray-600">Fall Detections</span>
+                                                <span id="fallCount" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-800">0</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-sm">
+                                                <span class="font-medium text-gray-600">Significant Events</span>
+                                                <span id="eventCount" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">0</span>
+                                            </div>
+                                            <div class="flex items-center justify-between text-sm">
+                                                <span class="font-medium text-gray-600">Analysis Duration</span>
+                                                <span id="duration" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-green-100 text-green-800">0s</span>
+                                            </div>
+                                        </div>
+                                        <button class="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg text-sm flex items-center justify-center transition duration-150 ease-in-out disabled:opacity-50" disabled>
+                                            <i class="fas fa-download mr-2"></i>
+                                            Download Report (N/A)
+                                        </button>
+                                    </div>
+
+                                    <!-- Video Player Area -->
+                                    <div id="video-player-area" class="results-video-container {% if not processed_video_url or processing_status != 'Completed' %}hidden{% endif %}"> <!-- Adjust initial hidden state -->
+                                         <p class="text-sm font-medium text-gray-700 mb-1 mt-4">Processed video ready:</p>
+                                         <video id="processed-video-player" controls width="640" class="bg-black">
+                                             {% if processed_video_url %}
+                                             <source src="{{ processed_video_url }}" type="video/mp4">
+                                             {% endif %}
+                                             Your browser does not support the video tag.
+                                         </video>
+                                         <a id="download-link" href="{{ processed_video_url | default('#') }}" download class="mt-3 inline-block w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg text-sm text-center transition duration-150 ease-in-out">
+                                             <i class="fas fa-download mr-2"></i>
+                                             Download Processed Video
+                                         </a>
+                                    </div>
+                                </div> <!-- End Analysis Results Column -->
+                            </div>
+                        </div>
+                    </div> <!-- End Upload & Analysis Section Wrapper -->
+                </div> <!-- End videoAnalysisView -->
+
+                <!-- ===== *** NEW: View Container: System Settings *** ===== -->
+                <div id="systemSettingsView" class="view-section hidden">
+                    <div class="bg-white rounded-lg shadow p-4 md:p-6 space-y-6">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-cog mr-2 text-indigo-600"></i>
+                            System Settings
+                        </h2>
+
+                         <!-- General System Settings Placeholder -->
+                         <div class="border rounded-lg p-4">
+                            <h3 class="text-lg font-medium text-gray-700 mb-4">General</h3>
+                            <p class="text-sm text-gray-500">Other system-wide settings can go here (e.g., model selection, resource limits, logging level)...</p>
+                            <!-- Add actual settings elements here later -->
+                         </div>
+
+                        <!-- ===== MOVED: Fall Detection Threshold Settings ===== -->
+                        <div class="border rounded-lg p-4">
+                             <h3 class="text-lg font-medium text-gray-700 mb-4">Fall Detection Parameters</h3>
+                             <!-- Container for the sliders -->
+                             <div class="threshold-slider-container">
+                                 <!-- Removed heading from here as it's redundant with the card title -->
+                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                     <!-- Velocity Threshold -->
+                                     <div>
+                                         <label for="fall-velocity-threshold">Velocity Threshold (Lower = More Sensitive)</label>
+                                         <div class="slider-wrapper">
+                                             <input type="range" id="fall-velocity-threshold" name="fall_velocity_threshold" min="0.1" max="1.0" step="0.05" value="0.4">
+                                             <span id="fall-velocity-threshold-value" class="value-display">0.40</span>
+                                         </div>
+                                         <p class="text-xs text-gray-500 mt-1">Min speed drop required (normalized by height).</p>
+                                     </div>
+                                     <!-- Confidence Threshold -->
+                                     <div>
+                                         <label for="fall-confidence-threshold">Confidence Threshold (Lower = More Sensitive)</label>
+                                         <div class="slider-wrapper">
+                                             <input type="range" id="fall-confidence-threshold" name="fall_confidence_threshold" min="0.1" max="0.9" step="0.05" value="0.5">
+                                             <span id="fall-confidence-threshold-value" class="value-display">0.50</span>
+                                         </div>
+                                          <p class="text-xs text-gray-500 mt-1">Min confidence score needed to trigger fall.</p>
+                                     </div>
+                                     <!-- Keypoint Confidence -->
+                                     <div>
+                                         <label for="min-kpt-confidence">Min Keypoint Confidence</label>
+                                         <div class="slider-wrapper">
+                                             <input type="range" id="min-kpt-confidence" name="min_kpt_confidence" min="0.1" max="0.7" step="0.05" value="0.3">
+                                             <span id="min-kpt-confidence-value" class="value-display">0.30</span>
+                                         </div>
+                                          <p class="text-xs text-gray-500 mt-1">Min confidence for a keypoint to be used.</p>
+                                     </div>
+                                     <!-- Placeholder for smoothing frames if needed later -->
+                                     <!--
+                                     <div>
+                                         <label for="fall-confirm-frames">Confirmation Frames</label> ...
+                                     </div>
+                                     <div>
+                                         <label for="fall-clear-frames">Clearance Frames</label> ...
+                                     </div>
+                                     -->
+                                 </div>
+                                 <div class="mt-5 text-right">
+                                     <button id="saveFallThresholdsBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-md text-sm transition duration-150 ease-in-out">
+                                         <i class="fas fa-save mr-1"></i> Apply Fall Settings
+                                     </button>
+                                      <p id="fall-thresholds-status" class="text-xs text-gray-600 mt-1 inline-block ml-3"></p>
+                                 </div>
+                             </div>
+                         </div>
+                        <!-- ===== END: Fall Detection Threshold Settings ===== -->
+
+                        <!-- Action Buttons for overall System Settings (if any) -->
+                         <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                            <!-- Add Reset/Save buttons for general system settings if needed -->
+                         </div>
+
+                    </div>
+                </div> <!-- End System Settings View -->
+
+                 <!-- ===== View Container: Alert Preferences ===== -->
+                 <div id="alertPreferencesView" class="view-section hidden">
+                    <div class="bg-white rounded-lg shadow p-4 md:p-6 space-y-6">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-bell mr-2 text-indigo-600"></i>
+                            Alert Preferences
+                        </h2>
+
+                        <!-- Alert Types Section -->
+                        <div class="border rounded-lg p-4">
+                            <h3 class="text-lg font-medium text-gray-700 mb-4">Alert Types</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <!-- Fall Detection -->
+                                <div class="border-r pr-6 border-gray-200 space-y-4">
+                                    <div class="flex items-center justify-between">
+                                        <label for="fallDetectionToggle" class="flex items-center cursor-pointer">
+                                            <i class="fas fa-user-injured mr-2 text-red-500"></i>
+                                            <span class="font-medium text-gray-700">Fall Detection</span>
+                                        </label>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                          <input type="checkbox" value="" id="fallDetectionToggle" class="sr-only peer" checked>
+                                          <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <!-- Sensitivity dropdown removed -->
+                                        <p class="text-sm text-gray-500 italic">Detection sensitivity (thresholds) configured in System Settings.</p>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input id="fallPlaySound" name="fallPlaySound" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                        <label for="fallPlaySound" class="ml-2 block text-sm text-gray-700">Play sound on detection</label>
+                                    </div>
+                                </div>
+                                <!-- Motion Detection -->
+                                <div class="border-r pr-6 border-gray-200 space-y-4">
+                                    <div class="flex items-center justify-between">
+                                         <label for="motionDetectionToggle" class="flex items-center cursor-pointer">
+                                            <i class="fas fa-running mr-2 text-blue-500"></i>
+                                            <span class="font-medium text-gray-700">Motion Detection</span>
+                                        </label>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                          <input type="checkbox" value="" id="motionDetectionToggle" class="sr-only peer">
+                                          <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                     <!-- Motion specific settings can go here if needed -->
+                                    <p class="text-sm text-gray-500 italic">Basic motion detection (On/Off).</p>
+                                </div>
+                                <!-- Inactivity Detection -->
+                                <div class="space-y-4">
+                                    <div class="flex items-center justify-between">
+                                        <label for="inactivityDetectionToggle" class="flex items-center cursor-pointer">
+                                            <i class="fas fa-bed mr-2 text-yellow-500"></i>
+                                            <span class="font-medium text-gray-700">Inactivity Detection</span>
+                                        </label>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                          <input type="checkbox" value="" id="inactivityDetectionToggle" class="sr-only peer">
+                                          <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                    <div>
+                                        <label for="inactivityThreshold" class="block text-sm font-medium text-gray-600 mb-1">Threshold Time</label>
+                                        <select id="inactivityThreshold" name="inactivityThreshold" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                            <option>15 minutes</option>
+                                            <option selected>30 minutes</option>
+                                            <option>1 hour</option>
+                                            <option>2 hours</option>
+                                        </select>
+                                    </div>
+                                     <div class="flex items-center">
+                                        <input id="inactivityPlaySound" name="inactivityPlaySound" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                        <label for="inactivityPlaySound" class="ml-2 block text-sm text-gray-700">Play sound on detection</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notification Methods Section -->
+                        <div class="border rounded-lg p-4">
+                             <h3 class="text-lg font-medium text-gray-700 mb-4">Notification Methods</h3>
+                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div class="flex items-center justify-between p-3 border rounded-md">
+                                    <label for="notifyInApp" class="flex items-center cursor-pointer">
+                                        <i class="fas fa-mobile-alt mr-2 text-gray-600"></i>
+                                        <span class="text-sm font-medium text-gray-700">In-App Notifications</span>
+                                     </label>
+                                     <label class="relative inline-flex items-center cursor-pointer ml-2">
+                                          <input type="checkbox" value="" id="notifyInApp" class="sr-only peer" checked>
+                                          <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between p-3 border rounded-md">
+                                    <label for="notifyEmail" class="flex items-center cursor-pointer">
+                                        <i class="fas fa-envelope mr-2 text-gray-600"></i>
+                                        <span class="text-sm font-medium text-gray-700">Email Notifications</span>
+                                    </label>
+                                     <label class="relative inline-flex items-center cursor-pointer ml-2">
+                                          <input type="checkbox" value="" id="notifyEmail" class="sr-only peer" checked>
+                                          <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between p-3 border rounded-md">
+                                    <label for="notifySMS" class="flex items-center cursor-pointer">
+                                        <i class="fas fa-sms mr-2 text-gray-600"></i>
+                                        <span class="text-sm font-medium text-gray-700">SMS Notifications</span>
+                                    </label>
+                                     <label class="relative inline-flex items-center cursor-pointer ml-2">
+                                          <input type="checkbox" value="" id="notifySMS" class="sr-only peer">
+                                          <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                                <div class="flex items-center justify-between p-3 border rounded-md">
+                                    <label for="notifyPhoneCall" class="flex items-center cursor-pointer">
+                                        <i class="fas fa-phone-alt mr-2 text-gray-600"></i>
+                                        <span class="text-sm font-medium text-gray-700">Automated Phone Call</span>
+                                     </label>
+                                     <label class="relative inline-flex items-center cursor-pointer ml-2">
+                                          <input type="checkbox" value="" id="notifyPhoneCall" class="sr-only peer">
+                                          <div class="w-9 h-5 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                    </label>
+                                </div>
+                             </div>
+                        </div>
+
+                         <!-- Emergency Contacts Section -->
+                        <div class="border rounded-lg p-4">
+                            <h3 class="text-lg font-medium text-gray-700 mb-4">Emergency Contacts</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <!-- Primary Contact -->
+                                <div class="space-y-3">
+                                    <h4 class="font-medium text-gray-600">Primary Contact</h4>
+                                    <div>
+                                        <label for="primaryName" class="block text-sm font-medium text-gray-600">Name</label>
+                                        <input type="text" name="primaryName" id="primaryName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="primaryRelationship" class="block text-sm font-medium text-gray-600">Relationship</label>
+                                        <input type="text" name="primaryRelationship" id="primaryRelationship" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="primaryPhone" class="block text-sm font-medium text-gray-600">Phone</label>
+                                        <input type="tel" name="primaryPhone" id="primaryPhone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="primaryEmail" class="block text-sm font-medium text-gray-600">Email</label>
+                                        <input type="email" name="primaryEmail" id="primaryEmail" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                </div>
+                                <!-- Secondary Contact -->
+                                <div class="space-y-3">
+                                    <h4 class="font-medium text-gray-600">Secondary Contact</h4>
+                                    <div>
+                                        <label for="secondaryName" class="block text-sm font-medium text-gray-600">Name</label>
+                                        <input type="text" name="secondaryName" id="secondaryName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="secondaryRelationship" class="block text-sm font-medium text-gray-600">Relationship</label>
+                                        <input type="text" name="secondaryRelationship" id="secondaryRelationship" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="secondaryPhone" class="block text-sm font-medium text-gray-600">Phone</label>
+                                        <input type="tel" name="secondaryPhone" id="secondaryPhone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                     <div>
+                                        <label for="secondaryEmail" class="block text-sm font-medium text-gray-600">Email</label>
+                                        <input type="email" name="secondaryEmail" id="secondaryEmail" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-sm">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Alert Schedule Section -->
+                        <div class="border rounded-lg p-4">
+                            <h3 class="text-lg font-medium text-gray-700 mb-4">Alert Schedule</h3>
+                            <fieldset class="space-y-2">
+                                <legend class="sr-only">Alert Schedule</legend>
+                                <div class="flex items-center">
+                                    <input id="schedule247" name="alertSchedule" type="radio" value="247" checked class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
+                                    <label for="schedule247" class="ml-3 block text-sm font-medium text-gray-700">24/7 Monitoring</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input id="scheduleCustom" name="alertSchedule" type="radio" value="custom" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300">
+                                    <label for="scheduleCustom" class="ml-3 block text-sm font-medium text-gray-700">Custom Hours (Not implemented)</label>
+                                </div>
+                                <!-- Add inputs for custom hours if needed -->
+                            </fieldset>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                            <button type="button" id="resetPrefsBtn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg text-sm transition duration-150 ease-in-out">
+                                Reset to Defaults
+                            </button>
+                            <button type="button" id="savePrefsBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg text-sm transition duration-150 ease-in-out flex items-center">
+                                <i class="fas fa-save mr-2"></i>Save Preferences
+                            </button>
+                        </div>
+                    </div>
+                </div> <!-- End Alert Preferences View -->
+
+                <!-- ===== View Container: Sign Language Translation ===== -->
+                <div id="signLanguageView" class="view-section hidden">
+                    <div class="bg-white rounded-lg shadow p-4 md:p-6 space-y-6">
+                        <h2 class="text-xl font-semibold text-gray-800 flex items-center">
+                            <i class="fas fa-sign-language mr-2 text-indigo-600"></i>
+                            Sign Language Translation
+                        </h2>
+                        <!-- Content from sign_lang_trans.html starts here -->
+                        <!-- Main Content: Camera and Translation -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+                            <!-- Camera View Section -->
+                            <section class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"> <!-- MODIFIED: Added border -->
+                                <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+                                <i class="fas fa-camera mr-2"></i>Camera View
+                                </header>
+                                <div class="p-4 flex flex-col items-center">
+                                <div id="asl-camera-placeholder" class="w-full h-64 bg-gray-300 rounded flex items-center justify-center text-gray-500 mb-4"> <!-- MODIFIED ID -->
+                                    <!-- Webcam feed will replace this -->
+                                    <div class="text-center">
+                                    <i class="fas fa-video fa-3x mb-2"></i>
+                                    <p>Click "Start Camera" to begin</p>
+                                    </div>
+                                </div>
+                                <img id="asl-webcam-feed" src="" alt="Live ASL Feed" class="rounded border w-full max-w-md hidden"> <!-- MODIFIED ID -->
+                                <button id="asl-start-camera-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center"> <!-- MODIFIED ID -->
+                                    <i class="fas fa-play mr-2"></i>Start Camera
+                                </button>
+                                <button id="asl-stop-camera-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-5 rounded-lg inline-flex items-center mt-2 hidden"> <!-- MODIFIED ID -->
+                                    <i class="fas fa-stop mr-2"></i>Stop Camera
+                                </button>
+                                </div>
+                            </section>
+
+                            <!-- Translation Section -->
+                            <section class="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"> <!-- MODIFIED: Added border -->
+                                <header class="bg-blue-100 p-3 text-indigo-800 font-semibold">
+                                <i class="fas fa-language mr-2"></i>Translation
+                                </header>
+                                <div class="p-4 flex flex-col"> 
+                                <div id="translation-output" class="flex-grow bg-gray-50 border rounded p-3 mb-4 text-gray-700 min-h-[150px] text-lg"> <!-- ID Unchanged -->
+                                    Translation will appear here...
+                                </div>
+                                <div class="flex flex-wrap justify-between items-center gap-4">
+                                    <button id="asl-clear-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center text-sm"> <!-- MODIFIED: Removed onclick, added ID -->
+                                        <i class="fas fa-times-circle mr-1"></i>Clear
+                                    </button>
+                                    <button id="asl-speak-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-lg inline-flex items-center text-sm"> <!-- MODIFIED ID -->
+                                        <i class="fas fa-volume-up mr-1"></i>Speak
+                                    </button>
+                                </div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- Common Phrases Section (NEW) -->
+                        <section class="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6 border border-gray-200"> <!-- MODIFIED: Added border -->
+                            <header class="mb-4">
+                                <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                                    <i class="fas fa-comment-dots mr-2 text-indigo-600"></i>Common Phrases
+                                </h3>
+                            </header>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3" id="asl-common-phrases-container"> <!-- MODIFIED: Added ID -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">Hello</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">Thank you</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">Please</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">Yes</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">No</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">Help</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">I need water</button> <!-- MODIFIED: Added class -->
+                                <button class="asl-common-phrase-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-medium py-2 px-3 rounded-lg text-sm">How are you?</button> <!-- MODIFIED: Added class -->
+                            </div>
+                        </section>
+
+                        <!-- Accessibility & Controls Section -->
+                        <section class="bg-white rounded-lg shadow-md p-4 md:p-6 mb-6 border border-gray-200"> <!-- MODIFIED: Added border -->
+                            <header class="mb-4">
+                                <h3 class="text-lg font-semibold text-gray-800 flex items-center">Accessibility & Controls</h3>
+                            </header>
+                            <div class="space-y-6">
+                                <!-- Font Size Control -->
+                                <div>
+                                    <label for="font-size-slider" class="block text-sm font-medium text-gray-700 mb-1">Adjust Translation Font Size (<span id="font-size-value">100%</span>)</label> <!-- MODIFIED: Label text for clarity -->
+                                    <input type="range" id="font-size-slider" min="50" max="200" value="100" step="10" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"> <!-- ID Unchanged -->
+                                </div>
+                        
+                                <!-- High Contrast Mode Toggle -->
+                                <div class="flex items-center justify-between">
+                                    <span id="asl-high-contrast-label" class="text-sm font-medium text-gray-700">High Contrast Mode</span>
+                                    <label for="high-contrast-toggle" class="switch">
+                                        <input type="checkbox" id="high-contrast-toggle"> <!-- ID Unchanged -->
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </section>
+                        <!-- Content from sign_lang_trans.html ends here -->
+                    </div>
+                </div> <!-- End Sign Language Translation View -->
+
+            </main> <!-- End Main Content Area -->
+        </div> <!-- End Main Content Flex Container -->
+    </div> <!-- End Outer Flex Container -->
+
+    <!-- Alert Modal (Minor adjustments needed) -->
+    <div id="alertModal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-75 px-4 transition-opacity duration-300 ease-out">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md transform transition-all duration-300 ease-out scale-95 opacity-0" id="alertModalContent">
+            <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-red-600 flex items-center">
+                    <i class="fas fa-exclamation-triangle mr-2 animate-pulse"></i>
+                    Fall Detected!
+                </h3>
+                <button id="closeAlertModal" class="text-gray-400 hover:text-gray-600 transition duration-150 ease-in-out">
+                    <i class="fas fa-times fa-lg"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <!-- Adjusted Text -->
+                <p class="mb-2 text-sm text-gray-700">A potential fall has been detected.</p>
+                <p class="mb-4 text-sm text-gray-500">
+                    Source: <span id="alertSource" class="font-semibold text-gray-700">Unknown</span><br>
+                    Time: <span id="alertTime" class="font-semibold text-gray-700">N/A</span>
+                    <!-- Added Person ID field -->
+                    <span id="alertPersonIdContainer" class="hidden"><br>Person ID: <span id="alertPersonId" class="font-semibold text-gray-700">N/A</span></span>
+                </p>
+                <!-- Video Container - will be hidden for webcam falls -->
+                <div id="alertVideoContainer" class="video-container mb-4 border border-gray-200">
+                    <video id="alertVideo" controls class="w-full h-full">
+                        <!-- Source set by JS for analysis results -->
+                    </video>
+                </div>
+                <!-- Adjusted Text -->
+                <p id="alertReviewText" class="text-xs text-gray-500 italic mb-4">Review the video and take appropriate action.</p>
+                <div class="flex space-x-3">
+                     <!-- Changed button text/action -->
+                     <button id="takeActionButton" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-3 text-sm rounded-lg flex items-center justify-center transition duration-150 ease-in-out">
+                         <i class="fas fa-phone-alt mr-2"></i>
+                         Take Action
+                     </button>
+                     <button id="dismissAlertModal" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-3 text-sm rounded-lg transition duration-150 ease-in-out">
+                         Dismiss
+                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- JavaScript Section -->
+    <!-- Add Socket.IO client library -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script>
+        // --- DOM Element References (Keep existing ones) ---
+        const sidebar = document.getElementById('sidebar');
+        const toggleSidebarBtn = document.getElementById('toggleSidebar');
+        const closeSidebarBtn = document.getElementById('closeSidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const statusElement = document.getElementById('status-message');
+        const currentFileElement = document.getElementById('current-file-display');
+        const errorElement = document.getElementById('error-message');
+        const videoPlayerArea = document.getElementById('video-player-area');
+        const videoPlayer = document.getElementById('processed-video-player');
+        const downloadLink = document.getElementById('download-link');
+        const uploadForm = document.getElementById('uploadVideoForm');
+        const detectionResultsSection = document.getElementById('detectionResults');
+        const fallCountEl = document.getElementById('fallCount');
+        const eventCountEl = document.getElementById('eventCount');
+        const durationEl = document.getElementById('duration');
+        const resultsPlaceholder = document.getElementById('results-placeholder');
+        // Modal Elements
+        const alertModal = document.getElementById('alertModal');
+        const alertModalContent = document.getElementById('alertModalContent');
+        const closeAlertModalBtn = document.getElementById('closeAlertModal');
+        const dismissAlertModalBtn = document.getElementById('dismissAlertModal');
+        const alertSourceEl = document.getElementById('alertSource');
+        const alertTimeEl = document.getElementById('alertTime');
+        const alertVideoContainer = document.getElementById('alertVideoContainer'); // Specific ID for container
+        const alertVideoEl = document.getElementById('alertVideo');
+        const alertReviewText = document.getElementById('alertReviewText');
+        const alertPersonIdContainer = document.getElementById('alertPersonIdContainer'); // Container for ID
+        const alertPersonId = document.getElementById('alertPersonId'); // Span for ID value
+        const takeActionButton = document.getElementById('takeActionButton'); // Action button
+
+        // View and Nav refs
+        const liveSurveillanceView = document.getElementById('liveSurveillanceView');
+        const videoAnalysisView = document.getElementById('videoAnalysisView');
+        const navLiveSurveillance = document.getElementById('navLiveSurveillance');
+        const navVideoAnalysis = document.getElementById('navVideoAnalysis');
+        const allSidebarLinks = document.querySelectorAll('.sidebar-link'); // Get all sidebar links
+
+        // Preferences View Elements
+        const alertPreferencesView = document.getElementById('alertPreferencesView');
+        const navAlertPreferences = document.getElementById('navAlertPreferences');
+        const savePrefsBtn = document.getElementById('savePrefsBtn');
+        const resetPrefsBtn = document.getElementById('resetPrefsBtn');
+        const fallDetectionToggle = document.getElementById('fallDetectionToggle');
+        // const fallSensitivity = document.getElementById('fallSensitivity'); // MODIFIED: Commented out as HTML element was removed
+        const fallPlaySound = document.getElementById('fallPlaySound');
+        const motionDetectionToggle = document.getElementById('motionDetectionToggle');
+        const inactivityDetectionToggle = document.getElementById('inactivityDetectionToggle');
+        const inactivityThreshold = document.getElementById('inactivityThreshold');
+        const inactivityPlaySound = document.getElementById('inactivityPlaySound');
+        const notifyInApp = document.getElementById('notifyInApp');
+        const notifyEmail = document.getElementById('notifyEmail');
+        const notifySMS = document.getElementById('notifySMS');
+        const notifyPhoneCall = document.getElementById('notifyPhoneCall');
+        const primaryName = document.getElementById('primaryName');
+        const primaryRelationship = document.getElementById('primaryRelationship');
+        const primaryPhone = document.getElementById('primaryPhone');
+        const primaryEmail = document.getElementById('primaryEmail');
+        const secondaryName = document.getElementById('secondaryName');
+        const secondaryRelationship = document.getElementById('secondaryRelationship');
+        const secondaryPhone = document.getElementById('secondaryPhone');
+        const secondaryEmail = document.getElementById('secondaryEmail');
+        const schedule247 = document.getElementById('schedule247');
+        const scheduleCustom = document.getElementById('scheduleCustom');
+
+        // *** NEW: System Settings View/Nav Refs ***
+        const systemSettingsView = document.getElementById('systemSettingsView');
+        const navSystemSettings = document.getElementById('navSystemSettings');
+
+        // --- NEW: Fall Threshold Elements ---
+        const fallVelocityThresholdSlider = document.getElementById('fall-velocity-threshold');
+        const fallVelocityThresholdValue = document.getElementById('fall-velocity-threshold-value');
+        const fallConfidenceThresholdSlider = document.getElementById('fall-confidence-threshold');
+        const fallConfidenceThresholdValue = document.getElementById('fall-confidence-threshold-value');
+        const minKptConfidenceSlider = document.getElementById('min-kpt-confidence');
+        const minKptConfidenceValue = document.getElementById('min-kpt-confidence-value');
+        const saveFallThresholdsBtn = document.getElementById('saveFallThresholdsBtn');
+        const fallThresholdsStatus = document.getElementById('fall-thresholds-status');
+
+        // --- NEW: Clap Tracker Elements ---
+        const clapTrackerView = document.getElementById('clapTrackerView');
+        const navClapTracker = document.getElementById('navClapTracker');
+        const clapTrackerStreamImg = document.getElementById('clap-tracker-stream');
+        const clapTrackerPlaceholder = document.getElementById('clap-tracker-placeholder');
+        const clapTrackerStatusSpan = document.getElementById('clap-tracker-status');
+        // --- ADD THESE LINES START ---
+        const setClapTargetBtn = document.getElementById('set-clap-target-btn');
+        const clapTargetInput = document.getElementById('clap-target-input');
+        const setTargetStatus = document.getElementById('set-target-status'); // Needed for status messages
+        // Add refs for the dashboard elements updated in updateClapDashboard
+        const clapCountToday = document.getElementById('clap-count-today');
+        const clapTargetDisplay = document.getElementById('clap-target-display');
+        const clapsRemaining = document.getElementById('claps-remaining');
+        const clapProgressPercentage = document.getElementById('clap-progress-percentage');
+        const clapProgressCircle = document.getElementById('clap-progress-circle');
+        const lastSessionClaps = document.getElementById('last-session-claps');
+        const lastSessionTime = document.getElementById('last-session-time');
+        const bestSessionClaps = document.getElementById('best-session-claps');
+        const bestSessionTime = document.getElementById('best-session-time');
+        const weeklyAvgClaps = document.getElementById('weekly-avg-claps');
+        const weeklyAvgChange = document.getElementById('weekly-avg-change');
+        const streakDays = document.getElementById('streak-days');
+        // --- ADD THESE LINES START (adding only the new ones) ---
+        const todayCaloriesEl = document.getElementById('today-calories');
+        const overallCaloriesEl = document.getElementById('overall-calories');
+        // --- ADD THESE LINES END ---
+        // --- END NEW: Clap Tracker Elements ---
+
+        // --- Fall Detection Cam Elements (for clarity) ---
+        const fallCamStreamImg = document.getElementById('video-stream'); // Already existed, just naming variable
+        const fallCamPlaceholder = document.getElementById('fall-cam-placeholder');
+        const fallCamStatusSpan = document.getElementById('fall-cam-status');
+
+        // --- Add near other DOM Element References ---
+        const startClapBtn = document.getElementById('start-clap-btn');
+        const stopClapBtn = document.getElementById('stop-clap-btn');
+        const clapControlStatus = document.getElementById('clap-control-status'); // Optional status display
+
+        // --- NEW: Sign Language Translation View/Nav Refs ---
+        const signLanguageView = document.getElementById('signLanguageView');
+        const navSignLanguage = document.getElementById('navSignLanguage');
+
+        // --- State Variables ---
+        let statusInterval = null;
+        let lastShownFallTaskId = null; // Track task ID for analysis modals
+        let clapStatusInterval = null; // Separate interval for clap status
+
+        // --- Functions ---
+
+        // Function to show/hide main content views
+        // *** MODIFIED showView to handle navSystemSettings ***
+        function showView(viewIdToShow) {
+            const views = document.querySelectorAll('.view-section');
+            views.forEach(view => {
+                if (view.id === viewIdToShow) {
+                    view.classList.remove('hidden');
+                } else {
+                    view.classList.add('hidden');
+                }
+            });
+
+            // Update active link styling
+             allSidebarLinks.forEach(link => {
+                 link.classList.remove('sidebar-link-active', 'bg-indigo-800', 'text-white');
+                 link.classList.add('text-indigo-200'); // Reset to default text color
+             });
+             // Construct ID like 'navLiveSurveillance', 'navSystemSettings', etc.
+             const activeLinkId = `nav${viewIdToShow.replace('View', '')}`; // MODIFIED LINE
+             const activeLink = document.getElementById(activeLinkId); // MODIFIED LINE
+             if (activeLink) {
+                activeLink.classList.add('sidebar-link-active', 'bg-indigo-800', 'text-white');
+                activeLink.classList.remove('text-indigo-200');
+             }
+        }
+
+        function openModal() {
+             if (alertModal && alertModalContent) {
+                 alertModal.classList.remove('hidden');
+                 requestAnimationFrame(() => { // Start transition
+                     alertModal.classList.add('opacity-100');
+                     alertModalContent.classList.add('scale-100', 'opacity-100');
+                     alertModalContent.classList.remove('scale-95', 'opacity-0');
+                 });
+             }
+        }
+
+        function closeModal() {
+             if (alertModal && alertModalContent) {
+                 // Reverse transition
+                 alertModal.classList.remove('opacity-100');
+                 alertModalContent.classList.remove('scale-100', 'opacity-100');
+                 alertModalContent.classList.add('scale-95', 'opacity-0');
+
+                 // Hide after transition ends
+                 setTimeout(() => {
+                     alertModal.classList.add('hidden');
+                     if (alertVideoEl) {
+                         alertVideoEl.pause();
+                         alertVideoEl.src = "";
+                     }
+                 }, 300); // Match transition duration
+             }
+        }
+
+        // Function to update visibility of webcam feeds based on active status
+        function updateFeedVisibility() {
+            // Fall Detection Feed
+            const isFallCamActive = fallCamStatusSpan && fallCamStatusSpan.textContent.trim() === 'Active';
+            if (fallCamStreamImg) fallCamStreamImg.classList.toggle('hidden', !isFallCamActive);
+            if (fallCamPlaceholder) fallCamPlaceholder.classList.toggle('hidden', isFallCamActive);
+             // Optional: Clear src when hidden to stop requests? Might cause flickering.
+             // if (fallCamStreamImg && !isFallCamActive) fallCamStreamImg.src = ''; // Test this carefully
+
+            // Clap Tracker Feed
+            const isClapTrackerActive = clapTrackerStatusSpan && clapTrackerStatusSpan.textContent.trim() === 'Active';
+            if (clapTrackerStreamImg) clapTrackerStreamImg.classList.toggle('hidden', !isClapTrackerActive);
+            if (clapTrackerPlaceholder) clapTrackerPlaceholder.classList.toggle('hidden', isClapTrackerActive);
+             // Optional: Clear src when hidden
+             // if (clapTrackerStreamImg && !isClapTrackerActive) clapTrackerStreamImg.src = ''; // Test this carefully
+        }
+
+        // Function to set progress circle value
+        function setProgress(circleElement, percent) {
+            if (!circleElement) return;
+            const radius = circleElement.r?.baseVal?.value || (36 / 2 - 3); // Estimate radius if needed
+            const circumference = radius * 2 * Math.PI;
+            circleElement.style.strokeDasharray = `${circumference} ${circumference}`;
+
+            const offset = circumference - (Math.max(0, Math.min(100, percent)) / 100) * circumference;
+            circleElement.style.strokeDashoffset = offset;
+        }
+
+        // --- Update Clap Dashboard UI ---
+        function updateClapDashboard(clapData) {
+            // clapData now includes current status AND history, e.g.:
+            // { clap_count: 10, target_claps: 100, ..., history: { last_session: {...}, best_session: {...}, ... } }
+            if (!clapData) return;
+
+            const count = clapData.clap_count || 0;
+            const target = clapData.target_claps || 0;
+            const history = clapData.history || {}; // Get history substructure
+
+            // --- Update Current Progress ---
+            if (clapCountToday) clapCountToday.textContent = count;
+            if (clapTargetDisplay) clapTargetDisplay.textContent = target;
+
+            let percentage = 0;
+            let remaining = 'N/A';
+            if (target > 0) {
+                percentage = Math.min(100, Math.round((count / target) * 100));
+                remaining = Math.max(0, target - count);
+            } else {
+                percentage = 0;
+                remaining = 'Target not set';
+            }
+
+            if (clapsRemaining) clapsRemaining.textContent = remaining;
+            if (clapProgressPercentage) clapProgressPercentage.textContent = `${percentage}%`;
+            if (clapProgressCircle) setProgress(clapProgressCircle, percentage);
+
+            if (clapTargetInput && document.activeElement !== clapTargetInput) {
+                clapTargetInput.value = target;
+            }
+
+            // --- Update Historical Stats ---
+            // Last Session
+            if (lastSessionClaps) {
+                if (history.last_session) {
+                    lastSessionClaps.innerHTML = `${history.last_session.claps} <span class="text-sm font-normal">claps</span>`;
+                } else {
+                    lastSessionClaps.innerHTML = `N/A <span class="text-sm font-normal">claps</span>`;
+                }
+            }
+            if (lastSessionTime) {
+                 lastSessionTime.textContent = history.last_session ? history.last_session.end_time : '--';
+            }
+
+            // Best Session
+            if (bestSessionClaps) {
+                 if (history.best_session) {
+                    bestSessionClaps.innerHTML = `${history.best_session.claps} <span class="text-sm font-normal">claps</span>`;
+                } else {
+                    bestSessionClaps.innerHTML = `N/A <span class="text-sm font-normal">claps</span>`;
+                }
+            }
+             if (bestSessionTime) { // You might need to add an ID for this <p> tag in HTML if you haven't
+                 bestSessionTime.textContent = history.best_session ? history.best_session.end_time : '--';
+             }
+
+            // Weekly Avg
+            if (weeklyAvgClaps) {
+                weeklyAvgClaps.innerHTML = `${history.weekly_avg || 'N/A'}<span class="text-sm font-normal">/day</span>`;
+            }
+             if (weeklyAvgChange) { // You might need to implement change calculation if desired
+                 weeklyAvgChange.textContent = '--'; // Placeholder for now
+             }
+
+            // Streak
+            if (streakDays) {
+                 streakDays.innerHTML = `${history.streak || 'N/A'} <span class="text-sm font-normal">days</span>`;
+            }
+
+            // --- ADD CALORIE UPDATES ---
+            // Today's Calories
+            if (todayCaloriesEl) {
+                const todayCal = history.total_calories_today || 0.0;
+                todayCaloriesEl.innerHTML = `${todayCal.toFixed(1)} <span class="text-sm font-normal">kcal</span>`;
+            }
+
+            // Overall Calories
+            if (overallCaloriesEl) {
+                const overallCal = history.total_calories_overall || 0.0;
+                overallCaloriesEl.innerHTML = `${overallCal.toFixed(1)} <span class="text-sm font-normal">kcal</span>`;
+            }
+            // --- END CALORIE UPDATES ---
+        }
+
+        // --- MODIFIED checkStatus to include clap status update ---
+        function checkStatus() {
+            fetch("{{ url_for('get_status') }}")
+                .then(response => response.ok ? response.json() : Promise.reject(`HTTP error! status: ${response.status}`))
+                .then(data => {
+                    // console.log(`DEBUG: checkStatus received data. Status: ${data.processing_status}`);
+
+                    // Update main status display elements safely
+                    if (statusElement) statusElement.textContent = data.processing_status || 'Unknown';
+                    if (currentFileElement) currentFileElement.textContent = data.current_file ? `File: ${data.current_file}` : '';
+                    if (errorElement) errorElement.textContent = data.error || '';
+
+                    const isCompleted = data.processing_status === 'Completed';
+                    const isProcessing = data.processing_status === 'Processing';
+                    const isQueued = data.processing_status === 'Queued';
+                    const isIdle = data.processing_status === 'Idle';
+
+                    // --- Handle Main Video Player AND Results Display ---
+                    if (isCompleted && data.processed_video_url) {
+                        if (videoPlayer && downloadLink && videoPlayerArea && resultsPlaceholder) {
+                            const newSrc = data.processed_video_url;
+                            if (videoPlayer.currentSrc !== newSrc && videoPlayer.getAttribute('src') !== newSrc) {
+                                console.log("Updating main player source to:", newSrc);
+                                videoPlayer.src = newSrc;
+                                videoPlayer.load();
+                            }
+                            if (downloadLink.href !== newSrc) {
+                                downloadLink.href = newSrc;
+                                try {
+                                    const url = new URL(newSrc, window.location.origin);
+                                    const pathSegments = url.pathname.split('/');
+                                    downloadLink.download = pathSegments[pathSegments.length - 1] || 'processed_video.mp4';
+                                } catch (e) {
+                                    console.error("Couldn't set download filename:", e);
+                                    downloadLink.download = 'processed_video.mp4';
+                                }
+                            }
+                        }
+
+                        if(detectionResultsSection && fallCountEl && eventCountEl && durationEl) {
+                            fallCountEl.textContent = data.fall_event_count !== undefined ? data.fall_event_count : 'N/A';
+                            eventCountEl.textContent = data.fall_event_count !== undefined ? data.fall_event_count : 'N/A';
+                            durationEl.textContent = data.analysis_duration_seconds !== null ? `${data.analysis_duration_seconds.toFixed(1)}s` : 'N/A';
+                            detectionResultsSection.classList.remove('hidden');
+                        }
+                        videoPlayerArea.classList.remove('hidden');
+                        resultsPlaceholder.classList.add('hidden');
+
+                    } else if (!isProcessing && !isQueued) {
+                         // Hide player AND results if idle, error, etc.
+                         if (resultsPlaceholder && videoPlayerArea && detectionResultsSection) {
+                             resultsPlaceholder.classList.remove('hidden');
+                             videoPlayerArea.classList.add('hidden');
+                             detectionResultsSection.classList.add('hidden');
+                         }
+                    } else {
+                         // Still processing or queued
+                         if (resultsPlaceholder && videoPlayerArea && detectionResultsSection) {
+                             resultsPlaceholder.classList.remove('hidden');
+                             videoPlayerArea.classList.add('hidden');
+                             detectionResultsSection.classList.add('hidden');
+                         }
+                    }
+
+                    // --- Handle Fall Alert Modal ONLY FOR VIDEO ANALYSIS ---
+                    // This uses the trigger_fall_modal flag from the backend poll response
+                    if (data.trigger_fall_modal && data.modal_video_url && data.task_id && data.task_id !== lastShownFallTaskId) {
+                        console.log(`Triggering Analysis Fall Modal for Task ID: ${data.task_id}`);
+
+                        if (alertSourceEl) alertSourceEl.textContent = data.current_file ? `Video Analysis: ${data.current_file}` : "Processed Video Analysis";
+                        if (alertTimeEl) alertTimeEl.textContent = new Date().toLocaleString(); // Use current time for modal display
+
+                        // Hide Person ID for analysis video unless backend provides it specifically for the modal
+                        if (alertPersonIdContainer) alertPersonIdContainer.classList.add('hidden');
+
+                        // --- Show video player for analysis results ---
+                        if (alertVideoContainer) alertVideoContainer.classList.remove('hidden'); // Make sure it's visible
+                        if (alertVideoEl) {
+                            console.log("Setting analysis modal video source to:", data.modal_video_url);
+                            alertVideoEl.src = data.modal_video_url;
+                            alertVideoEl.load();
+                        }
+                        // Update review text for analysis alerts
+                        if (alertReviewText) alertReviewText.textContent = "Review the video snippet and take appropriate action.";
+
+                        openModal();
+                        lastShownFallTaskId = data.task_id;
+                    }
+
+                    // --- Stop Polling ---
+                    if (isCompleted || data.processing_status === 'Error') {
+                         stopPolling();
+                     } else if (isIdle && !data.webcam_active && !data.clap_tracker_active) {
+                         // Stop only if idle AND *both* cams are inactive
+                         stopPolling();
+                     }
+
+                    // --- Update Fall Detection Webcam Status ---
+                    const isFallCamActive = data.webcam_active === true;
+                    if (fallCamStatusSpan) {
+                        fallCamStatusSpan.textContent = isFallCamActive ? 'Active' : 'Inactive';
+                        fallCamStatusSpan.className = isFallCamActive ? 'text-green-600 font-medium' : 'text-red-600 font-medium';
+                    }
+                    // Handle feed image/placeholder based on state
+                    if (fallCamStreamImg) {
+                        fallCamStreamImg.classList.toggle('hidden', !isFallCamActive);
+                        if (isFallCamActive && fallCamStreamImg.getAttribute('src') !== "{{ url_for('video_feed') }}?t=" + Date.now()) {
+                             fallCamStreamImg.src = "{{ url_for('video_feed') }}?t=" + Date.now();
+                        }
+                    }
+                    if (fallCamPlaceholder) fallCamPlaceholder.classList.toggle('hidden', isFallCamActive);
+
+
+                    // --- Update Clap Tracker Webcam Status AND Dashboard ---
+                    // Get the active status directly from the clap_status object if available
+                    const isClapTrackerActive = data.clap_status ? data.clap_status.active : (data.clap_tracker_active === true); // More robust check
+
+                    if (clapTrackerStatusSpan) {
+                        clapTrackerStatusSpan.textContent = isClapTrackerActive ? 'Active' : 'Inactive';
+                        clapTrackerStatusSpan.className = isClapTrackerActive ? 'text-green-600 font-medium' : 'text-red-600 font-medium';
+                    }
+
+                    // Handle feed image/placeholder based on state more robustly
+                    if (isClapTrackerActive) {
+                        // --- Tracker is ACTIVE ---
+                        if (clapTrackerPlaceholder) {
+                            clapTrackerPlaceholder.classList.add('hidden'); // Hide placeholder div
+                        }
+                        if (clapTrackerStreamImg) {
+                            clapTrackerStreamImg.classList.remove('hidden'); // Show image tag
+                            // Update src only if needed (or periodically) to ensure stream stays live
+                            // Adding timestamp helps prevent caching issues
+                            const newSrc = "{{ url_for('clap_tracker_feed') }}?t=" + Date.now();
+                            // Check current src to avoid unnecessary reloads if possible,
+                            // but MJPEG usually handles this. Reloading might be safer.
+                            if (clapTrackerStreamImg.getAttribute('src') !== newSrc) {
+                                 // console.log("Updating clap tracker img src"); // Debug log if needed
+                                 clapTrackerStreamImg.src = newSrc;
+                            }
+                        }
+                    } else {
+                        // --- Tracker is INACTIVE ---
+                        if (clapTrackerStreamImg) {
+                            clapTrackerStreamImg.classList.add('hidden'); // Hide image tag
+                            // Explicitly clear the src to ensure the browser stops streaming/displaying
+                            // anything from the old source, including potentially cached placeholders.
+                            if (clapTrackerStreamImg.getAttribute('src') !== '') {
+                                 clapTrackerStreamImg.src = ''; // Set src to empty
+                            }
+                        }
+                        if (clapTrackerPlaceholder) {
+                            clapTrackerPlaceholder.classList.remove('hidden'); // Show placeholder div
+                        }
+                    }
+
+                    // Update the dashboard using clap_status from poll
+                    if (data.clap_status) {
+                        updateClapDashboard(data.clap_status);
+                    }
+
+                })
+                .catch(error => {
+                    console.error('Fetch Error in checkStatus:', error);
+                    if (statusElement) statusElement.textContent = 'Error fetching status';
+                    if (errorElement) errorElement.textContent = error.message || 'Could not connect to server.';
+                    if(detectionResultsSection) detectionResultsSection.classList.add('hidden');
+                    if(resultsPlaceholder) resultsPlaceholder.classList.remove('hidden');
+                    if(videoPlayerArea) videoPlayerArea.classList.add('hidden');
+                    stopPolling();
+                });
+        }
+
+        function startPolling() {
+            if (statusInterval) return;
+            stopPolling(); // Clear any existing interval
+            console.log("Starting main status polling...");
+            checkStatus(); // Initial check
+            statusInterval = setInterval(checkStatus, 3000); // Poll every 3 seconds
+        }
+
+        function stopPolling() {
+            if (statusInterval) {
+                console.log("Stopping main status polling.");
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+        }
+
+        // --- Function to handle setting the clap target --- (NEW)
+        function handleSetClapTarget() {
+            const newTarget = clapTargetInput ? clapTargetInput.value : '100';
+            console.log(`Attempting to set clap target to: ${newTarget}`);
+            if (setTargetStatus) setTargetStatus.textContent = 'Setting...';
+
+            fetch("{{ url_for('set_clap_target') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ target: newTarget })
+            })
+            .then(response => response.ok ? response.json() : Promise.reject(response))
+            .then(data => {
+                if (data.success) {
+                    console.log("Set target success:", data.message);
+                    if (setTargetStatus) setTargetStatus.textContent = 'Target updated!';
+                    // Optionally update the UI immediately or wait for next poll
+                     checkStatus(); // Trigger a status refresh to get confirmed value
+                } else {
+                    throw new Error(data.error || 'Failed to set target.');
+                }
+            })
+            .catch(async errorResponse => {
+                let errorMsg = 'Error setting target.';
+                try {
+                    const errorData = await errorResponse.json();
+                    errorMsg = `Error: ${errorData.error || errorResponse.statusText}`;
+                } catch(e) {
+                    errorMsg = `Error setting target. Status: ${errorResponse.status}`;
+                }
+                console.error(errorMsg);
+                if (setTargetStatus) setTargetStatus.textContent = errorMsg;
+            });
+        }
+
+        // --- Socket.IO Client Setup ---
+        const socket = io(); // Connect to the server
+
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket server.');
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Disconnected from WebSocket server.');
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('WebSocket Connection Error:', error);
+        });
+
+        // --- MODIFIED: Handle Fall Events from WebSocket ---
+        socket.on('fall_detected_event', (data) => {
+            console.log('WebSocket: Fall detected event received:', data);
+
+            // Check if the event is from the live webcam OR has a snippet URL
+            if (data.source === 'Live Webcam') {
+                console.log('Live webcam fall detected, processing for modal...');
+
+                // Populate modal elements (common for live/snippet)
+                if (alertSourceEl) alertSourceEl.textContent = 'Live Webcam Feed';
+                if (alertTimeEl) alertTimeEl.textContent = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString();
+
+                // Hide Person ID for live view
+                if (alertPersonIdContainer) alertPersonIdContainer.classList.add('hidden');
+
+                // --- MODIFIED VIDEO LOGIC ---
+                if (data.snippet_url) {
+                    // If a snippet URL is available, show the video player
+                    console.log('Webcam snippet URL found, showing video player:', data.snippet_url);
+                    if (alertVideoContainer) alertVideoContainer.classList.remove('hidden');
+                    if (alertVideoEl) {
+                        alertVideoEl.src = data.snippet_url; // Use the relative URL
+                        alertVideoEl.load(); // Load the new source
+                        alertVideoEl.play().catch(e => console.warn("Autoplay prevented:", e)); // Attempt to autoplay
+                    }
+                    if (alertReviewText) alertReviewText.textContent = "Review the recorded snippet below and take appropriate action.";
+                } else {
+                    // If NO snippet URL, hide the video player container
+                    console.log('No webcam snippet URL, hiding video player.');
+                    if (alertVideoContainer) alertVideoContainer.classList.add('hidden');
+                    if (alertVideoEl) { // Stop any previous video
+                        alertVideoEl.pause();
+                        alertVideoEl.src = "";
+                    }
+                    if (alertReviewText) alertReviewText.textContent = "Review the live feed and take appropriate action.";
+                }
+                // --- END MODIFIED VIDEO LOGIC ---
+
+                // Open the modal
+                openModal();
+
+            } else {
+                // Optional: Handle fall events from other sources if needed in the future
+                 console.log(`Fall event received from source: ${data.source}. Not opening modal via WebSocket.`);
+            }
+        });
+
+        // --- Event Listeners ---
+        // Sidebar Toggle
+        if (toggleSidebarBtn) toggleSidebarBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            if (sidebarOverlay) sidebarOverlay.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+        });
+        if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            if (sidebarOverlay) sidebarOverlay.style.display = 'none';
+        });
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            sidebarOverlay.style.display = 'none';
+        });
+
+        // Modal Close
+        if (closeAlertModalBtn) closeAlertModalBtn.addEventListener('click', closeModal);
+        if (dismissAlertModalBtn) dismissAlertModalBtn.addEventListener('click', closeModal);
+        if (alertModal) {
+            alertModal.addEventListener('click', (event) => {
+                if (event.target === alertModal) { // Click on background only
+                    closeModal();
+                }
+            });
+        }
+
+        // Form Submit (for instant status update)
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', () => {
+                if (statusElement) statusElement.textContent = 'Uploading...';
+                if (errorElement) errorElement.textContent = ''; // Clear previous errors
+                lastShownFallTaskId = null; // Reset shown alert on new upload
+                // Hide results immediately on new upload
+                if (resultsPlaceholder && videoPlayerArea && detectionResultsSection) {
+                    resultsPlaceholder.classList.remove('hidden');
+                    videoPlayerArea.classList.add('hidden');
+                    detectionResultsSection.classList.add('hidden');
+                }
+                // Start polling because backend will transition to Queued/Processing
+                 startPolling();
+            });
+        }
+
+        // Sidebar Navigation Click Handlers
+        if (navLiveSurveillance) {
+            navLiveSurveillance.addEventListener('click', (e) => {
+                e.preventDefault();
+                showView('liveSurveillanceView');
+                stopPolling(); // Stop video processing polling
+                // No need to load fall thresholds here, they are part of Alert Preferences
+            });
+        }
+        if (navVideoAnalysis) {
+            navVideoAnalysis.addEventListener('click', (e) => {
+                e.preventDefault();
+                showView('videoAnalysisView');
+                 const currentStatus = statusElement ? statusElement.textContent.trim() : '';
+                 if (currentStatus === 'Queued' || currentStatus === 'Processing') {
+                     startPolling();
+                 } else {
+                     checkStatus(); // Load latest results/state
+                 }
+            });
+        }
+        if (navAlertPreferences) {
+            navAlertPreferences.addEventListener('click', (e) => {
+                e.preventDefault();
+                showView('alertPreferencesView');
+                loadAlertPreferences();
+                stopPolling();
+            });
+        }
+        if (navClapTracker) {
+            navClapTracker.addEventListener('click', (e) => {
+                e.preventDefault();
+                showView('clapTrackerView');
+            });
+        }
+
+        // NEW: Sign Language Navigation
+        if (navSignLanguage) {
+            navSignLanguage.addEventListener('click', (e) => {
+                e.preventDefault();
+                showView('signLanguageView');
+                stopPolling(); // Assuming general polling should stop for this view too
+            });
+        }
+
+        // Preferences View Listeners
+        if (savePrefsBtn) {
+            savePrefsBtn.addEventListener('click', saveAlertPreferences);
+        }
+        if (resetPrefsBtn) {
+             resetPrefsBtn.addEventListener('click', () => {
+                 if(confirm('Are you sure you want to reset all preferences to their defaults? This action cannot be undone.')) {
+                     console.log("Resetting preferences (reloading defaults for now)...");
+                     loadAlertPreferences(); // Re-fetch from backend (which holds defaults if not saved)
+                     alert('Preferences reset to default values. Click "Save Preferences" to apply.');
+                 }
+             });
+         }
+
+         // Take Action Button Listener
+         if (takeActionButton) {
+            takeActionButton.addEventListener('click', () => {
+                alert('"Take Action" button clicked. Implement desired functionality (e.g., calling emergency contacts).');
+                // Add logic here: make API call to backend, open phone dialer, etc.
+                closeModal(); // Close modal after action (optional)
+            });
+        }
+
+        // Clap Target Listener (NEW)
+        if (setClapTargetBtn) {
+            setClapTargetBtn.addEventListener('click', handleSetClapTarget);
+        }
+        // Optional: Allow setting target by pressing Enter in the input field
+        if (clapTargetInput) {
+            clapTargetInput.addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // Prevent default form submission if inside one
+                    handleSetClapTarget();
+                }
+            });
+        }
+
+        // --- Preferences Load/Save Functions ---
+        function loadAlertPreferences() {
+            console.log("Attempting to load alert preferences...");
+            fetch("{{ url_for('get_alert_preferences') }}")
+                .then(response => response.ok ? response.json() : Promise.reject(`HTTP error! status: ${response.status}`))
+                .then(prefs => {
+                    console.log("Preferences received:", prefs);
+                    // Populate form fields safely
+                    if(fallDetectionToggle) fallDetectionToggle.checked = prefs.fall_detection?.enabled ?? true;
+                    // if(fallSensitivity) fallSensitivity.value = prefs.fall_detection?.sensitivity ?? 'Medium (Balanced)'; // MODIFIED: Commented out
+                    if(fallPlaySound) fallPlaySound.checked = prefs.fall_detection?.play_sound ?? false;
+                    if(motionDetectionToggle) motionDetectionToggle.checked = prefs.motion_detection?.enabled ?? false;
+                    if(inactivityDetectionToggle) inactivityDetectionToggle.checked = prefs.inactivity_detection?.enabled ?? false;
+                    if(inactivityThreshold) inactivityThreshold.value = prefs.inactivity_detection?.threshold ?? '30 minutes';
+                    if(inactivityPlaySound) inactivityPlaySound.checked = prefs.inactivity_detection?.play_sound ?? false;
+                    if(notifyInApp) notifyInApp.checked = prefs.notifications?.in_app ?? true;
+                    if(notifyEmail) notifyEmail.checked = prefs.notifications?.email ?? true;
+                    if(notifySMS) notifySMS.checked = prefs.notifications?.sms ?? false;
+                    if(notifyPhoneCall) notifyPhoneCall.checked = prefs.notifications?.phone_call ?? false;
+                    if(primaryName) primaryName.value = prefs.emergency_contacts?.primary?.name ?? '';
+                    if(primaryRelationship) primaryRelationship.value = prefs.emergency_contacts?.primary?.relationship ?? '';
+                    if(primaryPhone) primaryPhone.value = prefs.emergency_contacts?.primary?.phone ?? '';
+                    if(primaryEmail) primaryEmail.value = prefs.emergency_contacts?.primary?.email ?? '';
+                    if(secondaryName) secondaryName.value = prefs.emergency_contacts?.secondary?.name ?? '';
+                    if(secondaryRelationship) secondaryRelationship.value = prefs.emergency_contacts?.secondary?.relationship ?? '';
+                    if(secondaryPhone) secondaryPhone.value = prefs.emergency_contacts?.secondary?.phone ?? '';
+                    if(secondaryEmail) secondaryEmail.value = prefs.emergency_contacts?.secondary?.email ?? '';
+                    const schedule = prefs.alert_schedule?.mode ?? '247';
+                    if(schedule === 'custom' && scheduleCustom) {
+                        scheduleCustom.checked = true;
+                    } else if (schedule247) {
+                        schedule247.checked = true;
+                    }
+                    console.log("Preferences form populated.");
+                })
+                .catch(error => {
+                    console.error('Fetch Error loading preferences:', error);
+                     if (errorElement) errorElement.textContent = `Error loading preferences: ${error.message}. Using defaults.`;
+                });
+        }
+
+        function saveAlertPreferences() {
+            console.log("Saving alert preferences...");
+            const prefs = {
+                fall_detection: {
+                    enabled: fallDetectionToggle?.checked ?? false,
+                    // sensitivity: fallSensitivity?.value ?? 'Medium (Balanced)', // MODIFIED: Commented out
+                    play_sound: fallPlaySound?.checked ?? false,
+                },
+                motion_detection: {
+                    enabled: motionDetectionToggle?.checked ?? false,
+                },
+                inactivity_detection: {
+                    enabled: inactivityDetectionToggle?.checked ?? false,
+                    threshold: inactivityThreshold?.value ?? '30 minutes',
+                    play_sound: inactivityPlaySound?.checked ?? false,
+                },
+                notifications: {
+                    in_app: notifyInApp?.checked ?? false,
+                    email: notifyEmail?.checked ?? false,
+                    sms: notifySMS?.checked ?? false,
+                    phone_call: notifyPhoneCall?.checked ?? false,
+                },
+                emergency_contacts: {
+                    primary: {
+                        name: primaryName?.value ?? '',
+                        relationship: primaryRelationship?.value ?? '',
+                        phone: primaryPhone?.value ?? '',
+                        email: primaryEmail?.value ?? '',
+                    },
+                    secondary: {
+                        name: secondaryName?.value ?? '',
+                        relationship: secondaryRelationship?.value ?? '',
+                        phone: secondaryPhone?.value ?? '',
+                        email: secondaryEmail?.value ?? '',
+                    }
+                },
+                alert_schedule: {
+                    mode: scheduleCustom?.checked ? 'custom' : '247',
+                }
+            };
+
+            fetch("{{ url_for('set_alert_preferences') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(prefs),
+            })
+            .then(response => response.ok ? response.json() : Promise.reject(response))
+            .then(data => {
+                console.log("Preferences saved successfully:", data);
+                 alert('Preferences saved successfully!');
+            })
+            .catch(async errorResponse => {
+                 let errorMsg = 'Failed to save preferences.';
+                try {
+                    const errorData = await errorResponse.json();
+                    errorMsg = `Failed to save preferences: ${errorData.error || errorResponse.statusText}`;
+                } catch(e) {
+                     errorMsg = `Failed to save preferences. Status: ${errorResponse.status}`;
+                }
+                console.error('Error saving preferences:', errorMsg);
+                 alert(errorMsg);
+            });
+        }
+
+        // --- Initial Page Load Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const initialStatus = statusElement ? statusElement.textContent.trim() : '';
+            console.log("Initial page status:", initialStatus);
+
+            // Show the Live Surveillance view by default
+            // --- Choose default view ---
+            // showView('systemSettingsView'); // Option 1: Show System Settings by default
+            // loadFallThresholds();           // Option 1: Load thresholds for System Settings
+            showView('liveSurveillanceView'); // Option 2: Keep Live Surveillance default
+            // loadFallThresholds(); // Option 2: NO LONGER load thresholds here // MODIFIED COMMENT
+
+            // Start polling only if initial status indicates active video processing OR a webcam is active
+            const initialFallCamActive = fallCamStatusSpan && fallCamStatusSpan.textContent.trim() === 'Active';
+            const initialClapCamActive = clapTrackerStatusSpan && clapTrackerStatusSpan.textContent.trim() === 'Active';
+            if (initialStatus === 'Queued' || initialStatus === 'Processing' || initialFallCamActive || initialClapCamActive) {
+                startPolling();
+            } else {
+                 // Check status once even if idle to get initial clap data
+                 checkStatus();
+            }
+
+            // Ensure modal starts hidden and with base transition state
+             if (alertModal && alertModalContent) {
+                 alertModal.classList.add('hidden', 'opacity-0');
+                 alertModalContent.classList.add('scale-95', 'opacity-0');
+             }
+        });
+
+        // --- Clap Tracker Control Listeners ---
+        if (startClapBtn) {
+            startClapBtn.addEventListener('click', () => {
+                console.log("Start Clapper button clicked (JS Fetch)");
+                if (clapControlStatus) clapControlStatus.textContent = 'Starting...';
+                startClapBtn.disabled = true; // Disable button while processing
+                stopClapBtn.disabled = true;
+
+                fetch("{{ url_for('start_clap_tracker') }}")
+                    .then(response => response.ok ? response.json() : Promise.reject(response))
+                    .then(data => {
+                        console.log("Start Clap Response:", data);
+                        if (data.success) {
+                             if (clapControlStatus) clapControlStatus.textContent = 'Tracker started.';
+                             // Start polling aggressively to update status quickly
+                             startPolling();
+                        } else {
+                            if (clapControlStatus) clapControlStatus.textContent = `Error: ${data.message || 'Failed to start.'}`;
+                            alert(`Error starting clap tracker: ${data.message || 'Unknown error'}`);
+                        }
+                    })
+                    .catch(async errorResponse => {
+                        let errorMsg = 'Failed to send start request.';
+                        try {
+                             const errorData = await errorResponse.json();
+                             errorMsg = `Error: ${errorData.message || errorResponse.statusText}`;
+                        } catch(e) {
+                             errorMsg = `Network error or server issue. Status: ${errorResponse.status || 'N/A'}`;
+                        }
+                        console.error('Start Clap Fetch Error:', errorMsg);
+                        if (clapControlStatus) clapControlStatus.textContent = errorMsg;
+                        alert(errorMsg); // Provide feedback to the user
+                    })
+                    .finally(() => {
+                        // Re-enable buttons slightly later to allow status update
+                        setTimeout(() => {
+                             startClapBtn.disabled = false;
+                             stopClapBtn.disabled = false;
+                             // Optionally clear status after a delay
+                             // setTimeout(() => { if (clapControlStatus) clapControlStatus.textContent = ''; }, 3000);
+                        }, 500); // Re-enable after half a second
+                         checkStatus(); // Refresh status immediately
+                    });
+            });
+        }
+
+        if (stopClapBtn) {
+            stopClapBtn.addEventListener('click', () => {
+                console.log("Stop Clapper button clicked (JS Fetch)");
+                 if (clapControlStatus) clapControlStatus.textContent = 'Stopping...';
+                 startClapBtn.disabled = true;
+                 stopClapBtn.disabled = true;
+
+                fetch("{{ url_for('stop_clap_tracker') }}")
+                    .then(response => response.ok ? response.json() : Promise.reject(response))
+                    .then(data => {
+                        console.log("Stop Clap Response:", data);
+                        if (data.success) {
+                            if (clapControlStatus) clapControlStatus.textContent = 'Tracker stopped. Session saved.';
+                        } else {
+                            if (clapControlStatus) clapControlStatus.textContent = `Error: ${data.message || 'Failed to stop properly.'}`;
+                             alert(`Error stopping clap tracker: ${data.message || 'Unknown error'}`);
+                        }
+                    })
+                    .catch(async errorResponse => {
+                         let errorMsg = 'Failed to send stop request.';
+                        try {
+                             const errorData = await errorResponse.json();
+                             errorMsg = `Error: ${errorData.message || errorResponse.statusText}`;
+                        } catch(e) {
+                             errorMsg = `Network error or server issue. Status: ${errorResponse.status || 'N/A'}`;
+                        }
+                        console.error('Stop Clap Fetch Error:', errorMsg);
+                         if (clapControlStatus) clapControlStatus.textContent = errorMsg;
+                         alert(errorMsg); // Provide feedback to the user
+                    })
+                    .finally(() => {
+                         setTimeout(() => {
+                            startClapBtn.disabled = false;
+                            stopClapBtn.disabled = false;
+                         }, 500);
+                         checkStatus(); // Refresh status immediately to show final results and inactive state
+                    });
+            });
+        }
+
+        // --- NEW: Fall Threshold Functions ---
+        function updateSliderValueDisplay(slider, display) {
+            if (slider && display) {
+                display.textContent = parseFloat(slider.value).toFixed(2);
+            }
+        }
+
+        function loadFallThresholds() {
+            console.log("Attempting to load fall thresholds...");
+            fetch("{{ url_for('get_fall_thresholds') }}")
+                .then(response => response.ok ? response.json() : Promise.reject(`HTTP error! status: ${response.status}`))
+                .then(thresholds => {
+                    console.log("Fall thresholds received:", thresholds);
+                    if (fallVelocityThresholdSlider) fallVelocityThresholdSlider.value = thresholds.velocity_threshold ?? 0.4;
+                    if (fallConfidenceThresholdSlider) fallConfidenceThresholdSlider.value = thresholds.confidence_threshold ?? 0.5;
+                    if (minKptConfidenceSlider) minKptConfidenceSlider.value = thresholds.min_kpt_confidence ?? 0.3;
+
+                    // Update displays after setting slider values
+                    updateSliderValueDisplay(fallVelocityThresholdSlider, fallVelocityThresholdValue);
+                    updateSliderValueDisplay(fallConfidenceThresholdSlider, fallConfidenceThresholdValue);
+                    updateSliderValueDisplay(minKptConfidenceSlider, minKptConfidenceValue);
+                    console.log("Fall threshold sliders populated.");
+                })
+                .catch(error => {
+                    console.error('Fetch Error loading fall thresholds:', error);
+                    if (fallThresholdsStatus) fallThresholdsStatus.textContent = `Error loading settings: ${error.message}`;
+                    // Optionally reset sliders to default visual state on error
+                    if (fallVelocityThresholdSlider) fallVelocityThresholdSlider.value = 0.4;
+                    if (fallConfidenceThresholdSlider) fallConfidenceThresholdSlider.value = 0.5;
+                    if (minKptConfidenceSlider) minKptConfidenceSlider.value = 0.3;
+                    updateSliderValueDisplay(fallVelocityThresholdSlider, fallVelocityThresholdValue);
+                    updateSliderValueDisplay(fallConfidenceThresholdSlider, fallConfidenceThresholdValue);
+                    updateSliderValueDisplay(minKptConfidenceSlider, minKptConfidenceValue);
+                });
+        }
+
+        function saveFallThresholds() {
+            console.log("Saving fall thresholds...");
+            if (fallThresholdsStatus) fallThresholdsStatus.textContent = 'Saving...';
+            const thresholds = {
+                 velocity_threshold: parseFloat(fallVelocityThresholdSlider?.value ?? 0.4),
+                 confidence_threshold: parseFloat(fallConfidenceThresholdSlider?.value ?? 0.5),
+                 min_kpt_confidence: parseFloat(minKptConfidenceSlider?.value ?? 0.3)
+            };
+
+            fetch("{{ url_for('set_fall_thresholds') }}", {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(thresholds)
+            })
+            .then(response => response.ok ? response.json() : Promise.reject(response))
+            .then(data => {
+                if (data.success) {
+                    console.log("Fall thresholds saved successfully:", data);
+                    if (fallThresholdsStatus) fallThresholdsStatus.textContent = 'Settings applied!';
+                } else {
+                     throw new Error(data.error || 'Failed to apply settings.');
+                }
+            })
+            .catch(async errorResponse => {
+                let errorMsg = 'Failed to apply settings.';
+                try {
+                    const errorData = await errorResponse.json();
+                    errorMsg = `Error: ${errorData.error || errorResponse.statusText}`;
+                } catch(e) {
+                    errorMsg = `Error saving settings. Status: ${errorResponse.status}`;
+                }
+                console.error('Error saving fall thresholds:', errorMsg);
+                if (fallThresholdsStatus) fallThresholdsStatus.textContent = errorMsg;
+            });
+        }
+
+        // --- NEW: Fall Threshold Slider/Button Listeners ---
+        if (fallVelocityThresholdSlider && fallVelocityThresholdValue) {
+            fallVelocityThresholdSlider.addEventListener('input', () => updateSliderValueDisplay(fallVelocityThresholdSlider, fallVelocityThresholdValue));
+        }
+        if (fallConfidenceThresholdSlider && fallConfidenceThresholdValue) {
+            fallConfidenceThresholdSlider.addEventListener('input', () => updateSliderValueDisplay(fallConfidenceThresholdSlider, fallConfidenceThresholdValue));
+        }
+        if (minKptConfidenceSlider && minKptConfidenceValue) {
+            minKptConfidenceSlider.addEventListener('input', () => updateSliderValueDisplay(minKptConfidenceSlider, minKptConfidenceValue));
+        }
+        if (saveFallThresholdsBtn) {
+            saveFallThresholdsBtn.addEventListener('click', saveFallThresholds);
+        }
+
+        // *** NEW: System Settings Listener ***
+        if (navSystemSettings) {
+             navSystemSettings.addEventListener('click', (e) => {
+                 e.preventDefault();
+                 showView('systemSettingsView');
+                 stopPolling();
+                 loadFallThresholds(); // Load thresholds when this view is shown
+             });
+        }
+
+        // ===== Sign Language Translation Feature START =====
+        const aslViewContainer = document.getElementById('signLanguageView'); // This is the overall view container
+        const aslCameraPlaceholder = document.getElementById('asl-camera-placeholder');
+        const aslWebcamFeed = document.getElementById('asl-webcam-feed');
+        const aslStartCameraBtn = document.getElementById('asl-start-camera-btn');
+        const aslStopCameraBtn = document.getElementById('asl-stop-camera-btn');
+        const aslTranslationOutput = document.getElementById('translation-output'); // This ID was kept generic as per user HTML
+        const aslClearTextBtn = document.getElementById('asl-clear-btn'); 
+        const aslSpeakBtn = document.getElementById('asl-speak-btn'); 
+        const aslFontSizeSlider = document.getElementById('font-size-slider'); // This ID was kept generic
+        const aslFontSizeValue = document.getElementById('font-size-value'); // This ID was kept generic
+        const aslHighContrastToggle = document.getElementById('high-contrast-toggle'); // This ID was kept generic
+        // const aslCommonPhraseButtons = document.querySelectorAll('#signLanguageView .grid button:not(#asl-start-camera-btn):not(#asl-stop-camera-btn):not(#asl-speak-btn)');
+        const aslCommonPhraseButtons = document.querySelectorAll('.asl-common-phrase-btn'); // Using the new class selector
+        const aslCommonPhrasesContainer = document.getElementById('asl-common-phrases-container');
+
+        let aslIsFetchingText = false;
+        let aslTextFetchInterval = null;
+        let aslIsCameraActive = false;
+        let aslBaseFontSizesSet = false;
+
+        // Helper function to capture base font sizes
+        function _captureAslBaseFontSizes() {
+            if (!aslViewContainer) return; // aslViewContainer should be document.getElementById('signLanguageView')
+
+            const selectors = [
+                // Main view title and its icon
+                'h2.text-xl.font-semibold', 
+                'h2.text-xl.font-semibold i.fas',
+                // Section headers and their icons
+                'section header', // Targets the header block for its text node
+                'section header i.fas',
+                // Camera placeholder text and icon
+                '#asl-camera-placeholder p',
+                '#asl-camera-placeholder i.fa-video', // Default placeholder icon
+                '#asl-camera-placeholder i.fa-3x',    // Error/spinner icon (if it uses fa-3x)
+                // Translation output
+                '#translation-output',
+                // Main action buttons (Start/Stop Camera, Clear, Speak) and their icons
+                '#asl-start-camera-btn', '#asl-start-camera-btn i.fas',
+                '#asl-stop-camera-btn', '#asl-stop-camera-btn i.fas',
+                '#asl-clear-btn', '#asl-clear-btn i.fas',
+                '#asl-speak-btn', '#asl-speak-btn i.fas',
+                // Common phrase buttons
+                '.asl-common-phrase-btn',
+                // Accessibility section labels and value display
+                'label[for="font-size-slider"]',
+                '#asl-high-contrast-label', // The ID you added to the "High Contrast Mode" span
+                'span#font-size-value'
+            ];
+
+            aslViewContainer.querySelectorAll(selectors.join(', ')).forEach(el => {
+                // Only set if not already set, to avoid issues if called multiple times
+                // and to respect original computed size before any JS override.
+                if (!el.dataset.baseFontSizePx) {
+                    const computedSize = window.getComputedStyle(el).fontSize;
+                    el.dataset.baseFontSizePx = parseFloat(computedSize); // Store in pixels
+                }
+            });
+            aslBaseFontSizesSet = true;
+            // console.log("ASL Base font sizes captured.");
+        }
+
+        function updateFontSize_asl() {
+            if (!aslFontSizeSlider || !aslViewContainer || !aslFontSizeValue) {
+                // console.error('ASL: Missing elements for font size update.');
+                return;
+            }
+
+            // If base sizes haven't been captured yet, and the slider is at 100% (default)
+            // capture them. If slider is not at 100%, temporarily set it, capture, then restore.
+            if (!aslBaseFontSizesSet) {
+                const originalSliderValue = aslFontSizeSlider.value;
+                if (originalSliderValue !== "100") {
+                    aslFontSizeSlider.value = "100"; // Set to 100% to capture defaults
+                }
+                _captureAslBaseFontSizes();
+                if (originalSliderValue !== "100") {
+                    aslFontSizeSlider.value = originalSliderValue; // Restore original value
+                }
+                // If still not set (e.g., view not fully rendered), try again next time
+                if (!aslBaseFontSizesSet) return;
+            }
+
+            const sliderScaleFactor = parseInt(aslFontSizeSlider.value) / 100; // e.g., 0.5 for 50%, 1.0 for 100%, 2.0 for 200%
+            aslFontSizeValue.textContent = aslFontSizeSlider.value + '%';
+
+            const selectors = [ /* Same selectors as in _captureAslBaseFontSizes */
+                'h2.text-xl.font-semibold', 'h2.text-xl.font-semibold i.fas',
+                'section header', 'section header i.fas',
+                '#asl-camera-placeholder p', '#asl-camera-placeholder i.fa-video', '#asl-camera-placeholder i.fa-3x',
+                '#translation-output',
+                '#asl-start-camera-btn', '#asl-start-camera-btn i.fas',
+                '#asl-stop-camera-btn', '#asl-stop-camera-btn i.fas',
+                '#asl-clear-btn', '#asl-clear-btn i.fas',
+                '#asl-speak-btn', '#asl-speak-btn i.fas',
+                '.asl-common-phrase-btn',
+                'label[for="font-size-slider"]',
+                '#asl-high-contrast-label',
+                'span#font-size-value'
+            ];
+
+            aslViewContainer.querySelectorAll(selectors.join(', ')).forEach(el => {
+                if (el.dataset.baseFontSizePx) {
+                    const baseSize = parseFloat(el.dataset.baseFontSizePx);
+                    const newSize = baseSize * sliderScaleFactor;
+                    el.style.fontSize = newSize + 'px';
+                }
+            });
+        }
+
+        function handleCommonPhrase_asl(phrase) {
+            if (aslTranslationOutput) {
+                // MODIFIED: Added check for empty/placeholder before appending
+                if (aslTranslationOutput.textContent === 'Translation will appear here...' || aslTranslationOutput.textContent.trim() === "") {
+                    aslTranslationOutput.textContent = phrase;
+                } else {
+                    aslTranslationOutput.textContent += " " + phrase;
+                }
+            }
+        }
+
+        function startCamera_asl() {
+            console.log("ASL: Start Camera clicked");
+            fetch('/asl/start_camera', { method: 'POST' }) // Assuming /asl/ prefix from backend plan
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' || data.status === 'already_active') {
+                        if (aslWebcamFeed) {
+                            aslWebcamFeed.src = '/asl/video_feed?t=' + new Date().getTime(); // Add timestamp to prevent caching
+                            aslWebcamFeed.classList.remove('hidden');
+                        }
+                        if (aslCameraPlaceholder) aslCameraPlaceholder.classList.add('hidden');
+                        if (aslStartCameraBtn) aslStartCameraBtn.classList.add('hidden');
+                        if (aslStopCameraBtn) aslStopCameraBtn.classList.remove('hidden');
+                        aslIsCameraActive = true;
+                        if (aslViewContainer && !aslViewContainer.classList.contains('hidden')) { // Start fetching if view is active
+                           startTextFetchLoop_asl();
+                        }
+                        console.log("ASL: Camera started or was already active.");
+                    } else {
+                        console.error("ASL: Failed to start camera - ", data.message);
+                        alert("Error starting ASL camera: " + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('ASL: Error starting camera:', error);
+                    alert("Error starting ASL camera. Is the backend running?");
+                });
+        }
+
+        function stopCamera_asl() {
+            console.log("ASL: Stop Camera clicked");
+            fetch('/asl/stop_camera', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        if (aslWebcamFeed) {
+                            aslWebcamFeed.src = '';
+                            aslWebcamFeed.classList.add('hidden');
+                        }
+                        if (aslCameraPlaceholder) aslCameraPlaceholder.classList.remove('hidden');
+                        if (aslStartCameraBtn) aslStartCameraBtn.classList.remove('hidden');
+                        if (aslStopCameraBtn) aslStopCameraBtn.classList.add('hidden');
+                        aslIsCameraActive = false;
+                        stopTextFetchLoop_asl();
+                        console.log("ASL: Camera stopped.");
+                         // Optionally clear translation when camera stops
+                        // if(aslTranslationOutput) aslTranslationOutput.textContent = 'Translation will appear here...'; 
+                    } else {
+                        console.error("ASL: Failed to stop camera - ", data.message);
+                    }
+                })
+                .catch(error => console.error('ASL: Error stopping camera:', error));
+        }
+
+        function startTextFetchLoop_asl() {
+            if (aslIsFetchingText) return; // Already fetching
+            if (!aslIsCameraActive) return; // Camera not active
+
+            console.log("ASL: Starting text fetch loop.");
+            aslIsFetchingText = true;
+            function fetchText() {
+                if (!aslIsFetchingText || !aslIsCameraActive || (aslViewContainer && aslViewContainer.classList.contains('hidden'))) {
+                    stopTextFetchLoop_asl(); // Stop if conditions no longer met
+                    return;
+                }
+                fetch('/asl/get_text') // Assuming /asl/ prefix
+                    .then(response => response.json())
+                    .then(data => {
+                        if (aslTranslationOutput && data.translated_text) {
+                            // Only update if there's new text different from placeholder or current different text
+                            if (aslTranslationOutput.textContent !== data.translated_text && data.translated_text.trim() !== "") {
+                                aslTranslationOutput.textContent = data.translated_text;
+                            } else if (data.translated_text.trim() === "" && aslIsCameraActive && aslTranslationOutput.textContent !== "Translation will appear here...") {
+                               // If backend sends empty but cam is active, maybe show detecting or keep last?
+                               // For now, let's not overwrite with empty if it already has text unless explicitly cleared.
+                            }
+                        }
+                    })
+                    .catch(error => console.error('ASL: Error fetching text:', error));
+            }
+            fetchText(); // Initial fetch
+            aslTextFetchInterval = setInterval(fetchText, 2000); // Fetch every 2 seconds
+        }
+
+        function stopTextFetchLoop_asl() {
+            if (aslTextFetchInterval) {
+                clearInterval(aslTextFetchInterval);
+                aslTextFetchInterval = null;
+            }
+            aslIsFetchingText = false;
+            console.log("ASL: Stopped text fetch loop.");
+        }
+
+        function clearText_asl() {
+            if (aslTranslationOutput) {
+                aslTranslationOutput.textContent = 'Translation will appear here...';
+            }
+            fetch('/asl/clear_text', { method: 'POST' }) // Assuming /asl/ prefix
+                .then(response => response.json())
+                .then(data => console.log("ASL: Clear text response - ", data.message))
+                .catch(error => console.error('ASL: Error clearing text:', error));
+        }
+
+        function speakText_asl() {
+            if (aslTranslationOutput && aslTranslationOutput.textContent && typeof SpeechSynthesisUtterance !== 'undefined') {
+                const textToSpeak = aslTranslationOutput.textContent;
+                // MODIFIED: Added check for empty/placeholder before speaking
+                if (textToSpeak === 'Translation will appear here...' || textToSpeak.trim() === "") return;
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        function toggleHighContrast_asl() {
+            document.body.classList.toggle('high-contrast');
+            // ADDED: Sync checkbox state with the body class
+            if (aslHighContrastToggle) {
+                aslHighContrastToggle.checked = document.body.classList.contains('high-contrast');
+            }
+        }
+
+        // Assign event listeners for ASL feature
+        if (aslStartCameraBtn) aslStartCameraBtn.onclick = startCamera_asl;
+        if (aslStopCameraBtn) aslStopCameraBtn.onclick = stopCamera_asl;
+        if (aslClearTextBtn) aslClearTextBtn.onclick = clearText_asl; // Ensure this uses the correct ID
+        if (aslSpeakBtn) aslSpeakBtn.onclick = speakText_asl;     // Ensure this uses the correct ID
+
+        if (aslFontSizeSlider) {
+            aslFontSizeSlider.addEventListener('input', updateFontSize_asl);
+            updateFontSize_asl(); // ADDED: Initialize font size when scripts load or view becomes active
+        }
+
+        if (aslHighContrastToggle) {
+             aslHighContrastToggle.onchange = toggleHighContrast_asl;
+             aslHighContrastToggle.checked = document.body.classList.contains('high-contrast'); // ADDED: Initialize checkbox state
+        }
+
+        // MODIFIED: Event listeners for common phrase buttons using new container ID
+        if (aslCommonPhrasesContainer) {
+            const phraseButtons = aslCommonPhrasesContainer.querySelectorAll('.asl-common-phrase-btn'); // Ensure buttons have this class
+            phraseButtons.forEach(button => {
+                button.addEventListener('click', () => handleCommonPhrase_asl(button.textContent));
+            });
+        }
+        // ===== Sign Language Translation Feature END =====
+
+    </script>
+</body>
+</html>
